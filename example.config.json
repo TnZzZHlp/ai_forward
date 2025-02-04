@@ -1,0 +1,32 @@
+{
+  "port": 48801,
+  "auth": "test",
+  "providers": [
+    {
+      "name": "openai",
+      "models": [
+        {
+          "alias": "Qwen-VL",
+          "model": "Qwen/Qwen2-VL-72B-Instruct"
+        },
+        {
+          "alias": "Translate-Free",
+          "model": "deepseek-ai/DeepSeek-V3"
+        }
+      ],
+      "url": "https://api.openai.com/v1/chat/completions",
+      "keys": ["123", "56564"]
+    },
+    {
+      "name": "togetherai",
+      "models": [
+        {
+          "alias": "Qwen-VL",
+          "model": "Qwen/Qwen2-VL-72B-Instruct"
+        }
+      ],
+      "url": "https://api.together.xyz/v1/chat/completions",
+      "keys": ["123", "56564"]
+    }
+  ]
+}
