@@ -2,6 +2,7 @@ use rand::rng;
 use rand::seq::IndexedRandom;
 use salvo::{http::request, http::response, prelude::*};
 use serde_json::json;
+use tracing::error;
 
 use crate::config::Provider;
 use crate::{CLIENT, CONFIG, PROVIDER_USAGE_COUNT};
@@ -116,6 +117,10 @@ async fn forward(
         .await
     {
         Ok(res) => {
+            if res.status() == 401 {
+                error!("提供者 {} 的密钥 {} 无效", provider.name, key);
+            }
+
             // 判断状态
             if res.status() != 200 {
                 Err(json!({"error": res.text().await.unwrap(), "provider": provider.name}))
