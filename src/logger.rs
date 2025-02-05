@@ -8,10 +8,18 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
     ctrl.call_next(req, depot, res).await;
     let duration = now.elapsed();
 
-    let ip = get_ip(req).await;
     let status = res.status_code.unwrap().as_u16();
-    let model = depot.get::<String>("model").map_or("None", |v| v);
-    let provider = depot.get::<String>("provider").map_or("None", |v| v);
+    let model = match depot.get::<String>("model") {
+        Ok(model) => model,
+        Err(_) => return,
+    };
+
+    let provider = match depot.get::<String>("provider") {
+        Ok(provider) => provider,
+        Err(_) => return,
+    };
+
+    let ip = get_ip(req).await;
 
     tracing::info!(
         "IP: {}, Status: {}, Model: {}, Provider: {}, Processing Time: {}",
