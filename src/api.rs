@@ -1,6 +1,6 @@
 use salvo::{http::request, http::response, prelude::*};
 use serde_json::json;
-use tracing::{debug, error};
+use tracing::error;
 
 use crate::config::Provider;
 use crate::{CLIENT, CONFIG, KEY_USAGE_COUNT, PROVIDER_USAGE_COUNT};
