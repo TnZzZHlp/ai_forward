@@ -1,11 +1,9 @@
-use rand::rng;
-use rand::seq::IndexedRandom;
 use salvo::{http::request, http::response, prelude::*};
 use serde_json::json;
-use tracing::error;
+use tracing::{debug, error};
 
 use crate::config::Provider;
-use crate::{CLIENT, CONFIG, PROVIDER_USAGE_COUNT};
+use crate::{CLIENT, CONFIG, KEY_USAGE_COUNT, PROVIDER_USAGE_COUNT};
 
 #[handler]
 pub async fn completions(
@@ -90,11 +88,16 @@ async fn forward(
         }
     };
 
+    // 在Provider中找到KEY_USAGE_COUNT中使用次数最少的提供者
+    let key = match select_key(provider).await {
+        Ok(key) => key,
+        Err(e) => {
+            return Err(json!({ "error": e }));
+        }
+    };
+
     let url = &provider.url;
-    let key = provider
-        .keys
-        .choose(&mut rng())
-        .expect("随机选择密钥出现问题");
+
     let model = &provider
         .models
         .iter()
@@ -157,4 +160,27 @@ async fn select_provider(providers: Vec<&Provider>) -> Result<&Provider, String>
     *count.entry(provider.name.clone()).or_insert(0) += 1;
 
     Ok(provider)
+}
+
+async fn select_key(provider: &Provider) -> Result<&str, String> {
+    // 在Provider中找到KEY_USAGE_COUNT中使用次数最少的提供者
+    let count = KEY_USAGE_COUNT.get().unwrap().read().unwrap();
+    let key = match provider
+        .keys
+        .iter()
+        .min_by_key(|x| count.get(*x).unwrap_or(&0))
+    {
+        Some(key) => key,
+        None => {
+            return Err(format!("提供者 {} 没有可用的密钥", provider.name));
+        }
+    };
+
+    drop(count);
+
+    let mut count = KEY_USAGE_COUNT.get().unwrap().write().unwrap();
+
+    *count.entry(key.to_string()).or_insert(0) += 1;
+
+    Ok(key)
 }

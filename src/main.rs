@@ -15,6 +15,7 @@ use logger::log;
 static CONFIG: OnceCell<Config> = OnceCell::new();
 static CLIENT: OnceCell<reqwest::Client> = OnceCell::new();
 static PROVIDER_USAGE_COUNT: OnceCell<RwLock<HashMap<String, u64>>> = OnceCell::new();
+static KEY_USAGE_COUNT: OnceCell<RwLock<HashMap<String, u64>>> = OnceCell::new();
 
 #[tokio::main]
 async fn main() {
@@ -54,6 +55,9 @@ async fn init_source() {
     PROVIDER_USAGE_COUNT
         .set(RwLock::new(HashMap::new()))
         .unwrap();
+
+    // Init Key Usage Count
+    KEY_USAGE_COUNT.set(RwLock::new(HashMap::new())).unwrap();
 
     // Init Logger
     tracing_subscriber::fmt::init();
