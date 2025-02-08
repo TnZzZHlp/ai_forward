@@ -126,7 +126,9 @@ async fn forward(
 
             // 判断状态
             if res.status() != 200 {
-                Err(json!({"error": res.text().await.unwrap(), "provider": provider.name}))
+                let text = res.text().await.unwrap();
+                error!("提供者 {} 返回了错误: {}", provider.name, text);
+                Err(json!({"error": text, "provider": provider.name}))
             } else {
                 Ok(res)
             }
