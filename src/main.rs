@@ -7,7 +7,7 @@ mod config;
 use config::Config;
 
 mod api;
-use api::completions;
+use api::{completions, no_think_completions};
 
 mod logger;
 use logger::log;
@@ -23,10 +23,13 @@ async fn main() {
     init_source().await;
 
     // Start Server
-    let router =
-        Router::new().push(Router::with_path("v1").push(
-            Router::with_path("chat").push(Router::with_path("completions").post(completions)),
-        ));
+    let router = Router::new().push(
+        Router::with_path("v1").push(
+            Router::with_path("chat")
+                .push(Router::with_path("completions").post(completions))
+                .push(Router::with_path("no_think_completions").post(no_think_completions)),
+        ),
+    );
 
     let service = Service::new(router).hoop(log);
 
@@ -60,5 +63,7 @@ async fn init_source() {
     KEY_USAGE_COUNT.set(RwLock::new(HashMap::new())).unwrap();
 
     // Init Logger
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt::SubscriberBuilder::default()
+        .with_max_level(tracing::Level::INFO)
+        .init();
 }
