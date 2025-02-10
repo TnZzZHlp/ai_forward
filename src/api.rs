@@ -52,6 +52,12 @@ pub async fn completions(
     match forward(&mut json, depot).await {
         Ok(ai_res) => {
             res.stream(ai_res.bytes_stream());
+
+            if json["stream"].as_bool().unwrap_or(false) {
+                depot.insert("Content-Type", "text/event-stream".to_string());
+            } else {
+                depot.insert("Content-Type", "application/json".to_string());
+            }
         }
         Err(e) => {
             res.stuff(StatusCode::INTERNAL_SERVER_ERROR, Json(e));
