@@ -54,9 +54,11 @@ pub async fn completions(
             res.stream(ai_res.bytes_stream());
 
             if json["stream"].as_bool().unwrap_or(false) {
-                depot.insert("Content-Type", "text/event-stream".to_string());
+                res.headers_mut()
+                    .insert("Content-Type", "text/event-stream".parse().unwrap());
             } else {
-                depot.insert("Content-Type", "application/json".to_string());
+                res.headers_mut()
+                    .insert("Content-Type", "application/json".parse().unwrap());
             }
         }
         Err(e) => {
