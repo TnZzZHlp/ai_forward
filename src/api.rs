@@ -171,6 +171,8 @@ async fn process_stream(
                             events.pop();
                         }
 
+                        // 由于每个SSE Respone不一定包含完整的</think>标签, 以后再找办法实现
+
                         if *think.lock().await {
                             for (index, event) in events.iter().enumerate() {
                                 if event.contains("</think>")
