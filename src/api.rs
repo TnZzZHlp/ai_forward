@@ -1,6 +1,11 @@
+use std::sync::Arc;
+
+use bytes::Bytes;
+use futures::stream::StreamExt;
 use salvo::{http::request, http::response, prelude::*};
 use serde_json::json;
-use tracing::error;
+use tokio::sync::Mutex;
+use tracing::{error, info};
 
 use crate::config::Provider;
 use crate::{CLIENT, CONFIG, KEY_USAGE_COUNT, PROVIDER_USAGE_COUNT};
@@ -51,12 +56,141 @@ pub async fn completions(
     // 调用AI
     match forward(&mut json, depot).await {
         Ok(ai_res) => {
-            res.stream(ai_res.bytes_stream());
+            if json["stream"].as_bool().unwrap_or(false) {
+                let original_stream = ai_res.bytes_stream();
+                res.stream(original_stream);
+                res.headers_mut()
+                    .insert("Content-Type", "text/event-stream".parse().unwrap());
+            } else {
+                // 直接返回
+                let original_stream = ai_res.bytes_stream();
+                res.stream(original_stream);
+                res.headers_mut()
+                    .insert("Content-Type", "application/json".parse().unwrap());
+            }
         }
         Err(e) => {
             res.stuff(StatusCode::INTERNAL_SERVER_ERROR, Json(e));
         }
     }
+}
+
+#[handler]
+pub async fn no_think_completions(
+    res: &mut response::Response,
+    req: &mut request::Request,
+    depot: &mut Depot,
+) {
+    // 获取 Authorization
+    match req.header::<&str>("Authorization") {
+        Some(auth) => {
+            if auth != format!("Bearer {}", CONFIG.get().unwrap().auth) {
+                res.stuff(
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({ "error": "无效的 Authorization" })),
+                );
+                return;
+            }
+        }
+        None => {
+            res.stuff(
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "error": "缺少 Authorization" })),
+            );
+            return;
+        }
+    }
+
+    // 解析JSON
+    // https://github.com/hyperium/hyper/issues/3111
+    // 默认Payload大小为8KB，这里设置为10MB
+    let payload = req.payload_with_max_size(1024 * 1024 * 10).await.unwrap();
+
+    let mut json: serde_json::Value =
+        match serde_json::from_str(std::str::from_utf8(payload).unwrap()) {
+            Ok(json) => json,
+            Err(e) => {
+                res.stuff(
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({ "error": e.to_string() })),
+                );
+                return;
+            }
+        };
+
+    // 调用AI
+    match forward(&mut json, depot).await {
+        Ok(ai_res) => {
+            if json["stream"].as_bool().unwrap_or(false) {
+                let stream = process_stream(ai_res.bytes_stream()).await;
+                res.stream(stream);
+                res.headers_mut()
+                    .insert("Content-Type", "text/event-stream".parse().unwrap());
+            } else {
+                // 直接返回
+                let original_stream = ai_res.bytes_stream();
+                res.stream(original_stream);
+                res.headers_mut()
+                    .insert("Content-Type", "application/json".parse().unwrap());
+            }
+        }
+        Err(e) => {
+            res.stuff(StatusCode::INTERNAL_SERVER_ERROR, Json(e));
+        }
+    }
+}
+
+async fn process_stream(
+    stream: impl futures_core::Stream<Item = Result<Bytes, reqwest::Error>>,
+) -> impl futures_core::Stream<Item = Result<Bytes, reqwest::Error>> {
+    // 等待</think>出现一次后再把后续的数据返回
+    let buffer = Arc::new(Mutex::new(String::new()));
+    let think = Arc::new(Mutex::new(true));
+
+    stream.filter_map(move |item| {
+        let value = buffer.clone();
+        let think = think.clone();
+        async move {
+            match item {
+                Ok(bytes) => {
+                    if let Ok(text) = std::str::from_utf8(&bytes) {
+                        let mut text = text.to_string();
+                        // 如果缓冲区有数据, 则将数据拼接到text
+                        if !value.lock().await.is_empty() {
+                            text = format!("{}{}", value.lock().await.as_str(), text);
+                            value.lock().await.clear();
+                        }
+
+                        // 判断是不是 \n\n结尾, 如果不是则数据不完整, 将最后一次不完整的数据写入缓冲区等待下一次
+                        let mut events = text.split("\n\n").collect::<Vec<&str>>();
+                        if !text.ends_with("\n\n") {
+                            let last = events.last().unwrap();
+                            value.lock().await.push_str(last);
+                            // 去除最后一个不完整的数据
+                            events.pop();
+                        }
+
+                        if *think.lock().await {
+                            for (index, event) in events.iter().enumerate() {
+                                if event.contains("</think>") {
+                                    *think.lock().await = false;
+
+                                    return Some(Ok(Bytes::from(
+                                        events[index + 2..].join("\n\n").as_bytes().to_vec(),
+                                    )));
+                                }
+                            }
+                        }
+
+                        Some(Ok(Bytes::from(text.as_bytes().to_vec())))
+                    } else {
+                        None
+                    }
+                }
+                Err(_) => None,
+            }
+        }
+    })
 }
 
 async fn forward(
