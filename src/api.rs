@@ -55,7 +55,7 @@ pub async fn completions(
 
     // 调用AI
     match forward(&mut json, depot).await {
-        Ok(ai_res) => {
+        Ok((ai_res, _)) => {
             if json["stream"].as_bool().unwrap_or(false) {
                 let original_stream = ai_res.bytes_stream();
                 res.stream(original_stream);
@@ -120,9 +120,9 @@ pub async fn no_think_completions(
 
     // 调用AI
     match forward(&mut json, depot).await {
-        Ok(ai_res) => {
+        Ok((ai_res, think)) => {
             if json["stream"].as_bool().unwrap_or(false) {
-                let stream = process_stream(ai_res.bytes_stream()).await;
+                let stream = process_stream(ai_res.bytes_stream(), think).await;
                 res.stream(stream);
                 res.headers_mut()
                     .insert("Content-Type", "text/event-stream".parse().unwrap());
@@ -142,6 +142,7 @@ pub async fn no_think_completions(
 
 async fn process_stream(
     stream: impl futures_core::Stream<Item = Result<Bytes, reqwest::Error>>,
+    support_think: bool,
 ) -> impl futures_core::Stream<Item = Result<Bytes, reqwest::Error>> {
     // 等待</think>出现一次后再把后续的数据返回
     let buffer = Arc::new(Mutex::new(String::new()));
@@ -172,17 +173,36 @@ async fn process_stream(
 
                         if *think.lock().await {
                             for (index, event) in events.iter().enumerate() {
-                                if event.contains("</think>") {
+                                if event.contains("</think>")
+                                    || event.contains("\\u003c/think\\u003e")
+                                {
                                     *think.lock().await = false;
 
+                                    let replace = &events[index].replace("</think>", "");
+
+                                    events[index] = replace;
+
+                                    let replace =
+                                        &events[index].replace("\\u003c/think\\u003e", "");
+
+                                    events[index] = replace;
+
                                     return Some(Ok(Bytes::from(
-                                        events[index + 2..].join("\n\n").as_bytes().to_vec(),
+                                        events[index..].join("\n\n").as_bytes().to_vec(),
                                     )));
                                 }
                             }
                         }
 
-                        Some(Ok(Bytes::from(text.as_bytes().to_vec())))
+                        if !*think.lock().await {
+                            return Some(Ok(Bytes::from(text.as_bytes().to_vec())));
+                        }
+
+                        if !support_think {
+                            return Some(Ok(Bytes::from(text.as_bytes().to_vec())));
+                        }
+
+                        None
                     } else {
                         None
                     }
@@ -196,7 +216,7 @@ async fn process_stream(
 async fn forward(
     json: &mut serde_json::Value,
     depot: &mut Depot,
-) -> Result<reqwest::Response, serde_json::Value> {
+) -> Result<(reqwest::Response, bool), serde_json::Value> {
     // 获取模型
     let model = match json["model"].as_str() {
         Some(model) => model,
@@ -236,8 +256,11 @@ async fn forward(
         .models
         .iter()
         .find(|m| m.alias == model)
-        .expect("查找模型出现问题")
-        .model;
+        .expect("查找模型出现问题");
+
+    let think = model.think.unwrap_or(false);
+
+    let model = &model.model;
 
     // 替换源JSON中的模型
     json.as_object_mut().unwrap()["model"] = serde_json::Value::String(model.to_string());
@@ -262,19 +285,19 @@ async fn forward(
             if res.status() != 200 {
                 let text = res.text().await.unwrap();
                 error!("提供者 {} 返回了错误: {}", provider.name, text);
-                Err(json!({"error": text, "provider": provider.name}))
+                return Err(json!({"error": text, "provider": provider.name}));
             } else {
-                Ok(res)
+                res
             }
         }
-        Err(e) => Err(json!({"error": e.to_string(), "provider": provider.name})),
+        Err(e) => return Err(json!({"error": e.to_string(), "provider": provider.name})),
     };
 
     // 记录模型和提供者
     depot.insert("model", model.to_string());
     depot.insert("provider", provider.name.clone());
 
-    resp
+    Ok((resp, think))
 }
 
 async fn select_provider(providers: Vec<&Provider>) -> Result<&Provider, String> {

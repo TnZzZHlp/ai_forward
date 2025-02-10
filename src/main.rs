@@ -63,5 +63,7 @@ async fn init_source() {
     KEY_USAGE_COUNT.set(RwLock::new(HashMap::new())).unwrap();
 
     // Init Logger
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt::SubscriberBuilder::default()
+        .with_max_level(tracing::Level::INFO)
+        .init();
 }
