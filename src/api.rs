@@ -1,7 +1,11 @@
+use std::convert::Infallible;
 use std::sync::Arc;
 
 use bytes::Bytes;
+use eventsource_stream::{EventStream, Eventsource};
 use futures::stream::StreamExt;
+use salvo::hyper::service::service_fn;
+use salvo::sse;
 use salvo::{http::request, http::response, prelude::*};
 use serde_json::json;
 use tokio::sync::Mutex;
@@ -122,14 +126,66 @@ pub async fn no_think_completions(
     match forward(&mut json, depot).await {
         Ok((ai_res, think)) => {
             if json["stream"].as_bool().unwrap_or(false) {
-                let stream = process_stream(ai_res.bytes_stream(), think).await;
-                res.stream(stream);
+                let thinked = Arc::new(Mutex::new(false));
+                let buffer = Arc::new(Mutex::new(String::new()));
+
+                let stream = ai_res.bytes_stream().eventsource().then(move |event| {
+                    let thinked = thinked.clone();
+                    let buffer = buffer.clone();
+                    async move {
+                        match event {
+                            Ok(event) => {
+                                if !think || *thinked.lock().await {
+                                    Ok::<SseEvent, Infallible>(SseEvent::default().text(event.data))
+                                } else {
+                                    let mut json =
+                                        serde_json::from_str::<serde_json::Value>(&event.data)
+                                            .unwrap();
+
+                                    let mut buffer = buffer.lock().await;
+
+                                    // 写入缓冲区
+                                    buffer.push_str(
+                                        json["choices"][0]["delta"]["content"].as_str().unwrap(),
+                                    );
+
+                                    // 如果有</think>，则认为已经思考完毕
+                                    if buffer.contains("</think>\n\n") {
+                                        *thinked.lock().await = true;
+                                        json["choices"][0]["delta"]["content"] = buffer
+                                            .split("</think>\n\n")
+                                            .last()
+                                            .unwrap()
+                                            .to_string()
+                                            .into();
+                                    } else {
+                                        json["choices"][0]["delta"]["content"] =
+                                            String::new().into();
+                                    }
+
+                                    Ok(SseEvent::default().json(json).unwrap())
+                                }
+                            }
+                            Err(e) => Ok(SseEvent::default().text(e.to_string())),
+                        }
+                    }
+                });
+
+                sse::stream(res, stream);
                 res.headers_mut()
                     .insert("Content-Type", "text/event-stream".parse().unwrap());
             } else {
                 // 直接返回
-                let original_stream = ai_res.bytes_stream();
-                res.stream(original_stream);
+                let mut json = ai_res.json::<serde_json::Value>().await.unwrap();
+                json["choices"][0]["message"]["content"] = json["choices"][0]["message"]["content"]
+                    .as_str()
+                    .unwrap()
+                    .split("</think>\n\n")
+                    .last()
+                    .unwrap()
+                    .to_string()
+                    .into();
+                res.render(Json(json));
                 res.headers_mut()
                     .insert("Content-Type", "application/json".parse().unwrap());
             }
@@ -138,81 +194,6 @@ pub async fn no_think_completions(
             res.stuff(StatusCode::INTERNAL_SERVER_ERROR, Json(e));
         }
     }
-}
-
-async fn process_stream(
-    stream: impl futures_core::Stream<Item = Result<Bytes, reqwest::Error>>,
-    support_think: bool,
-) -> impl futures_core::Stream<Item = Result<Bytes, reqwest::Error>> {
-    // 等待</think>出现一次后再把后续的数据返回
-    let buffer = Arc::new(Mutex::new(String::new()));
-    let think = Arc::new(Mutex::new(true));
-
-    stream.filter_map(move |item| {
-        let value = buffer.clone();
-        let think = think.clone();
-        async move {
-            match item {
-                Ok(bytes) => {
-                    if let Ok(text) = std::str::from_utf8(&bytes) {
-                        let mut text = text.to_string();
-                        // 如果缓冲区有数据, 则将数据拼接到text
-                        if !value.lock().await.is_empty() {
-                            text = format!("{}{}", value.lock().await.as_str(), text);
-                            value.lock().await.clear();
-                        }
-
-                        // 判断是不是 \n\n结尾, 如果不是则数据不完整, 将最后一次不完整的数据写入缓冲区等待下一次
-                        let mut events = text.split("\n\n").collect::<Vec<&str>>();
-                        if !text.ends_with("\n\n") {
-                            let last = events.last().unwrap();
-                            value.lock().await.push_str(last);
-                            // 去除最后一个不完整的数据
-                            events.pop();
-                        }
-
-                        // 由于每个SSE Respone不一定包含完整的</think>标签, 以后再找办法实现
-
-                        if *think.lock().await {
-                            for (index, event) in events.iter().enumerate() {
-                                if event.contains("</think>")
-                                    || event.contains("\\u003c/think\\u003e")
-                                {
-                                    *think.lock().await = false;
-
-                                    let replace = &events[index].replace("</think>", "");
-
-                                    events[index] = replace;
-
-                                    let replace =
-                                        &events[index].replace("\\u003c/think\\u003e", "");
-
-                                    events[index] = replace;
-
-                                    return Some(Ok(Bytes::from(
-                                        events[index..].join("\n\n").as_bytes().to_vec(),
-                                    )));
-                                }
-                            }
-                        }
-
-                        if !*think.lock().await {
-                            return Some(Ok(Bytes::from(text.as_bytes().to_vec())));
-                        }
-
-                        if !support_think {
-                            return Some(Ok(Bytes::from(text.as_bytes().to_vec())));
-                        }
-
-                        None
-                    } else {
-                        None
-                    }
-                }
-                Err(_) => None,
-            }
-        }
-    })
 }
 
 async fn forward(
