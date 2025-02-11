@@ -19,7 +19,6 @@ pub struct Provider {
 pub struct Model {
     pub alias: String,
     pub model: String,
-    pub think: Option<bool>,
 }
 
 impl Config {

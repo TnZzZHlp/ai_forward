@@ -1,15 +1,13 @@
 use std::convert::Infallible;
 use std::sync::Arc;
 
-use bytes::Bytes;
-use eventsource_stream::{EventStream, Eventsource};
+use eventsource_stream::Eventsource;
 use futures::stream::StreamExt;
-use salvo::hyper::service::service_fn;
 use salvo::sse;
 use salvo::{http::request, http::response, prelude::*};
 use serde_json::json;
 use tokio::sync::Mutex;
-use tracing::{error, info};
+use tracing::error;
 
 use crate::config::Provider;
 use crate::{CLIENT, CONFIG, KEY_USAGE_COUNT, PROVIDER_USAGE_COUNT};
@@ -59,7 +57,7 @@ pub async fn completions(
 
     // 调用AI
     match forward(&mut json, depot).await {
-        Ok((ai_res, _)) => {
+        Ok(ai_res) => {
             if json["stream"].as_bool().unwrap_or(false) {
                 let original_stream = ai_res.bytes_stream();
                 res.stream(original_stream);
@@ -124,7 +122,7 @@ pub async fn no_think_completions(
 
     // 调用AI
     match forward(&mut json, depot).await {
-        Ok((ai_res, think)) => {
+        Ok(ai_res) => {
             if json["stream"].as_bool().unwrap_or(false) {
                 let thinked = Arc::new(Mutex::new(false));
                 let buffer = Arc::new(Mutex::new(String::new()));
@@ -135,7 +133,7 @@ pub async fn no_think_completions(
                     async move {
                         match event {
                             Ok(event) => {
-                                if !think || *thinked.lock().await {
+                                if *thinked.lock().await {
                                     Ok::<SseEvent, Infallible>(SseEvent::default().text(event.data))
                                 } else {
                                     let mut json =
@@ -148,6 +146,16 @@ pub async fn no_think_completions(
                                     buffer.push_str(
                                         json["choices"][0]["delta"]["content"].as_str().unwrap(),
                                     );
+
+                                    // 如果前7个字符不是<think>，则认为该模型不支持思考
+                                    if !buffer.starts_with("<think>") && buffer.chars().count() > 7
+                                    {
+                                        *thinked.lock().await = true;
+                                        json["choices"][0]["delta"]["content"] =
+                                            buffer.to_string().into();
+
+                                        return Ok(SseEvent::default().json(json).unwrap());
+                                    }
 
                                     // 如果有</think>，则认为已经思考完毕
                                     if buffer.contains("</think>\n\n") {
@@ -199,7 +207,7 @@ pub async fn no_think_completions(
 async fn forward(
     json: &mut serde_json::Value,
     depot: &mut Depot,
-) -> Result<(reqwest::Response, bool), serde_json::Value> {
+) -> Result<reqwest::Response, serde_json::Value> {
     // 获取模型
     let model = match json["model"].as_str() {
         Some(model) => model,
@@ -239,11 +247,8 @@ async fn forward(
         .models
         .iter()
         .find(|m| m.alias == model)
-        .expect("查找模型出现问题");
-
-    let think = model.think.unwrap_or(false);
-
-    let model = &model.model;
+        .expect("查找模型出现问题")
+        .model;
 
     // 替换源JSON中的模型
     json.as_object_mut().unwrap()["model"] = serde_json::Value::String(model.to_string());
@@ -280,7 +285,7 @@ async fn forward(
     depot.insert("model", model.to_string());
     depot.insert("provider", provider.name.clone());
 
-    Ok((resp, think))
+    Ok(resp)
 }
 
 async fn select_provider(providers: Vec<&Provider>) -> Result<&Provider, String> {
