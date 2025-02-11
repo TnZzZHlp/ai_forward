@@ -144,7 +144,13 @@ pub async fn no_think_completions(
 
                                     // 写入缓冲区
                                     buffer.push_str(
-                                        json["choices"][0]["delta"]["content"].as_str().unwrap(),
+                                        match json["choices"][0]["delta"]["content"].as_str() {
+                                            Some(content) => content,
+                                            None => {
+                                                error!("解析内容出现错误: {}", json);
+                                                return Ok(SseEvent::default().json(json).unwrap());
+                                            }
+                                        },
                                     );
 
                                     // 如果前7个字符不是<think>，则认为该模型不支持思考
