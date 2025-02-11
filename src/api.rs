@@ -153,9 +153,8 @@ pub async fn no_think_completions(
                                         },
                                     );
 
-                                    // 如果前7个字符不是<think>，则认为该模型不支持思考
-                                    if !buffer.starts_with("<think>") && buffer.chars().count() > 7
-                                    {
+                                    // 如果前3个字符不是<th，则认为该模型不支持思考
+                                    if !buffer.starts_with("<th") && buffer.chars().count() > 3 {
                                         *thinked.lock().await = true;
                                         json["choices"][0]["delta"]["content"] =
                                             buffer.to_string().into();
