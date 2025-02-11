@@ -26,8 +26,8 @@ async fn main() {
     let router = Router::new().push(
         Router::with_path("v1").push(
             Router::with_path("chat")
-                .push(Router::with_path("completions").post(completions))
-                .push(Router::with_path("no_think_completions").post(no_think_completions)),
+                .push(Router::with_path("completions").post(no_think_completions))
+                .push(Router::with_path("think_completions").post(completions)),
         ),
     );
 
