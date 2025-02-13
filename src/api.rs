@@ -136,9 +136,14 @@ pub async fn no_think_completions(
                                 if *thinked.lock().await {
                                     Ok::<SseEvent, Infallible>(SseEvent::default().text(event.data))
                                 } else {
-                                    let mut json =
-                                        serde_json::from_str::<serde_json::Value>(&event.data)
-                                            .unwrap();
+                                    let mut json = match serde_json::from_str::<serde_json::Value>(
+                                        &event.data,
+                                    ) {
+                                        Ok(json) => json,
+                                        Err(_) => {
+                                            return Ok(SseEvent::default().text(event.data));
+                                        }
+                                    };
 
                                     let mut buffer = buffer.lock().await;
 
