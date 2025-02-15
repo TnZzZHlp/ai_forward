@@ -275,7 +275,7 @@ async fn forward(
         .await
     {
         Ok(res) => {
-            if res.status() == 401 {
+            if res.status() == 401 || res.status() == 403 {
                 error!("提供者 {} 的密钥 {} 无效", provider.name, key);
             }
 
