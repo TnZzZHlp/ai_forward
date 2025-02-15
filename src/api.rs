@@ -153,7 +153,7 @@ pub async fn no_think_completions(
                                             Some(content) => content,
                                             None => {
                                                 error!("解析内容出现错误: {}", json);
-                                                return Ok(SseEvent::default().json(json).unwrap());
+                                                return Ok(SseEvent::default().text(&event.data));
                                             }
                                         },
                                     );
