@@ -152,7 +152,6 @@ pub async fn no_think_completions(
                                         match json["choices"][0]["delta"]["content"].as_str() {
                                             Some(content) => content,
                                             None => {
-                                                error!("解析内容出现错误: {}", json);
                                                 return Ok(SseEvent::default().text(&event.data));
                                             }
                                         },
