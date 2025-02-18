@@ -180,7 +180,7 @@ pub async fn no_think_completions(
                                             .split("</think>")
                                             .last()
                                             .unwrap()
-                                            .trim()
+                                            .trim_start()
                                             .to_string()
                                             .into();
                                     } else {
