@@ -57,7 +57,7 @@ pub async fn completions(
 
     // 调用AI
     match forward(&mut json, depot).await {
-        Ok(ai_res) => {
+        Ok((ai_res, _)) => {
             if json["stream"].as_bool().unwrap_or(false) {
                 let original_stream = ai_res.bytes_stream();
                 res.stream(original_stream);
@@ -122,17 +122,24 @@ pub async fn no_think_completions(
 
     // 调用AI
     match forward(&mut json, depot).await {
-        Ok(ai_res) => {
+        Ok((ai_res, model)) => {
             if json["stream"].as_bool().unwrap_or(false) {
                 let thinked = Arc::new(Mutex::new(false));
                 let buffer = Arc::new(Mutex::new(String::new()));
+                let model = Arc::new(model);
 
                 let stream = ai_res.bytes_stream().eventsource().then(move |event| {
                     let thinked = thinked.clone();
                     let buffer = buffer.clone();
+                    let model = model.clone();
                     async move {
                         match event {
                             Ok(event) => {
+                                // 如果模型名字不包含r1则代表不支持思考
+                                if !model.contains("r1") {
+                                    return Ok(SseEvent::default().text(event.data));
+                                }
+
                                 if *thinked.lock().await {
                                     Ok::<SseEvent, Infallible>(SseEvent::default().text(event.data))
                                 } else {
@@ -156,15 +163,6 @@ pub async fn no_think_completions(
                                             }
                                         },
                                     );
-
-                                    // 如果前3个字符不是<th，则认为该模型不支持思考
-                                    if !buffer.starts_with("<th") && buffer.chars().count() > 3 {
-                                        *thinked.lock().await = true;
-                                        json["choices"][0]["delta"]["content"] =
-                                            buffer.to_string().into();
-
-                                        return Ok(SseEvent::default().json(json).unwrap());
-                                    }
 
                                     // 如果有</think>，则认为已经思考完毕
                                     if buffer.contains("</think>\n\n") {
@@ -216,7 +214,7 @@ pub async fn no_think_completions(
 async fn forward(
     json: &mut serde_json::Value,
     depot: &mut Depot,
-) -> Result<reqwest::Response, serde_json::Value> {
+) -> Result<(reqwest::Response, String), serde_json::Value> {
     // 获取模型
     let model = match json["model"].as_str() {
         Some(model) => model,
@@ -294,7 +292,7 @@ async fn forward(
     depot.insert("model", model.to_string());
     depot.insert("provider", provider.name.clone());
 
-    Ok(resp)
+    Ok((resp, model.to_string()))
 }
 
 async fn select_provider(providers: Vec<&Provider>) -> Result<&Provider, String> {
