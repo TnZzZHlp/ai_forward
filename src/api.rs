@@ -136,7 +136,7 @@ pub async fn no_think_completions(
                         match event {
                             Ok(event) => {
                                 // 如果模型名字不包含r1则代表不支持思考
-                                if !model.contains("r1") {
+                                if !model.to_ascii_lowercase().contains("r1") {
                                     return Ok(SseEvent::default().text(event.data));
                                 }
 
@@ -153,6 +153,15 @@ pub async fn no_think_completions(
                                     };
 
                                     let mut buffer = buffer.lock().await;
+
+                                    // 如果reasoning_content存在则代表思考与输出分离
+                                    if json["choices"][0]["delta"]["reasoning_content"]
+                                        .as_str()
+                                        .is_some()
+                                    {
+                                        *thinked.lock().await = true;
+                                        return Ok(SseEvent::default().text(event.data));
+                                    }
 
                                     // 写入缓冲区
                                     buffer.push_str(
