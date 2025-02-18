@@ -152,8 +152,6 @@ pub async fn no_think_completions(
                                         }
                                     };
 
-                                    let mut buffer = buffer.lock().await;
-
                                     // 如果reasoning_content存在则代表思考与输出分离
                                     if json["choices"][0]["delta"]["reasoning_content"]
                                         .as_str()
@@ -162,6 +160,8 @@ pub async fn no_think_completions(
                                         *thinked.lock().await = true;
                                         return Ok(SseEvent::default().text(event.data));
                                     }
+
+                                    let mut buffer = buffer.lock().await;
 
                                     // 写入缓冲区
                                     buffer.push_str(
@@ -174,12 +174,13 @@ pub async fn no_think_completions(
                                     );
 
                                     // 如果有</think>，则认为已经思考完毕
-                                    if buffer.contains("</think>") {
+                                    if buffer.contains("</think>\n\n") {
                                         *thinked.lock().await = true;
                                         json["choices"][0]["delta"]["content"] = buffer
                                             .split("</think>")
                                             .last()
                                             .unwrap()
+                                            .trim()
                                             .to_string()
                                             .into();
                                     } else {
