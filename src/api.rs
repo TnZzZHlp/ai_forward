@@ -174,7 +174,7 @@ pub async fn no_think_completions(
                                     );
 
                                     // 如果有</think>，则认为已经思考完毕
-                                    if buffer.contains("</think>\n\n") {
+                                    if buffer.contains("</think>") {
                                         *thinked.lock().await = true;
                                         json["choices"][0]["delta"]["content"] = buffer
                                             .split("</think>")
