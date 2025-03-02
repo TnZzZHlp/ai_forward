@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 use tracing::error;
 
 use crate::config::Provider;
-use crate::{CHACHE, CLIENT, CONFIG, KEY_USAGE_COUNT, PROVIDER_USAGE_COUNT};
+use crate::{CACHE, CLIENT, CONFIG, KEY_USAGE_COUNT, PROVIDER_USAGE_COUNT};
 
 #[handler]
 pub async fn completions(
@@ -57,6 +57,7 @@ pub async fn completions(
 
     // 查询缓存
     if reply_cache(&req_json, res).await {
+        depot.insert("hit_cache", true);
         return;
     }
 
@@ -95,19 +96,19 @@ async fn process_normal_reply(
         .insert("Content-Type", "application/json".parse().unwrap());
 
     // 记录缓存
-    CHACHE.get().unwrap().insert(
-        req_json["messages"]
-            .as_array()
-            .unwrap()
-            .to_vec()
-            .iter()
-            .map(|x| x.to_string())
-            .collect(),
-        reply["choices"][0]["message"]["content"]
-            .as_str()
-            .unwrap()
-            .to_string(),
-    );
+    CACHE
+        .get()
+        .unwrap()
+        .insert(
+            serde_json::to_string(&req_json["messages"]).unwrap(),
+            Arc::new(
+                reply["choices"][0]["message"]["content"]
+                    .as_str()
+                    .unwrap()
+                    .to_string(),
+            ),
+        )
+        .await;
 
     res.render(Json(reply));
 }
@@ -127,16 +128,14 @@ async fn process_stream_reply(
         rx.recv().await;
         let buffer = buffer_clone.lock().await;
         // 记录缓存
-        CHACHE.get().unwrap().insert(
-            req_json["messages"]
-                .as_array()
-                .unwrap()
-                .to_vec()
-                .iter()
-                .map(|x| x.to_string())
-                .collect(),
-            buffer.to_string(),
-        );
+        CACHE
+            .get()
+            .unwrap()
+            .insert(
+                serde_json::to_string(&req_json["messages"]).unwrap(),
+                Arc::new(buffer.to_string()),
+            )
+            .await;
     });
 
     let stream = ai_res.bytes_stream().eventsource().then(move |event| {
@@ -177,15 +176,15 @@ async fn process_stream_reply(
 }
 
 async fn reply_cache(req_json: &Value, res: &mut response::Response) -> bool {
-    let cache = CHACHE.get().unwrap();
-    let key = req_json["messages"]
-        .as_array()
-        .unwrap()
-        .to_vec()
-        .iter()
-        .map(|x| x.to_string())
-        .collect::<Vec<String>>();
-    if let Some(cached) = cache.get(&key) {
+    let cache = CACHE.get().unwrap();
+    if let Some(cached) = cache
+        .get(
+            serde_json::to_string(&req_json["messages"])
+                .unwrap()
+                .as_str(),
+        )
+        .await
+    {
         // 判断请求类型
         if req_json["stream"].as_bool().unwrap_or(false) {
             // 直接返回
@@ -199,7 +198,7 @@ async fn reply_cache(req_json: &Value, res: &mut response::Response) -> bool {
                             "choices": [
                                 {
                                     "delta": {
-                                        "content": cached,
+                                        "content": cached.as_str(),
                                         "role": "assistant"
                                     }
                                 }
@@ -219,7 +218,7 @@ async fn reply_cache(req_json: &Value, res: &mut response::Response) -> bool {
                 "choices": [
                     {
                         "message": {
-                            "content": cached,
+                            "content": cached.as_str(),
                             "role": "assistant"
                         }
                     }

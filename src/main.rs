@@ -1,7 +1,10 @@
+use moka::future::Cache;
 use once_cell::sync::OnceCell;
-use quick_cache::sync::Cache;
 use salvo::prelude::*;
-use std::{collections::HashMap, sync::RwLock};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 mod config;
 use config::Config;
@@ -16,7 +19,7 @@ static CONFIG: OnceCell<Config> = OnceCell::new();
 static CLIENT: OnceCell<reqwest::Client> = OnceCell::new();
 static PROVIDER_USAGE_COUNT: OnceCell<RwLock<HashMap<String, u64>>> = OnceCell::new();
 static KEY_USAGE_COUNT: OnceCell<RwLock<HashMap<String, u64>>> = OnceCell::new();
-static CHACHE: OnceCell<Cache<Vec<String>, String>> = OnceCell::new();
+static CACHE: OnceCell<Cache<String, Arc<String>>> = OnceCell::new();
 
 #[tokio::main]
 async fn main() {
@@ -24,13 +27,10 @@ async fn main() {
     init_source().await;
 
     // Start Server
-    let router = Router::new().push(
-        Router::with_path("v1").push(
-            Router::with_path("chat")
-                .push(Router::with_path("completions").post(completions))
-                .push(Router::with_path("think_completions").post(completions)),
-        ),
-    );
+    let router =
+        Router::new().push(Router::with_path("v1").push(
+            Router::with_path("chat").push(Router::with_path("completions").post(completions)),
+        ));
 
     let service = Service::new(router).hoop(log);
 
@@ -70,5 +70,25 @@ async fn init_source() {
         .init();
 
     // Init Cache
-    CHACHE.set(Cache::new(100000)).unwrap();
+    CACHE.set(Cache::new(100000)).unwrap();
+    // 如果有缓存文件就加载
+    if std::path::Path::new("cache").exists() {
+        let caches = std::fs::read_to_string("cache").unwrap();
+        for cache in caches.split("\n+++\n") {
+            if cache.is_empty() {
+                continue;
+            }
+
+            let cache = cache.split("\n===\n").collect::<Vec<&str>>();
+
+            let key = cache[0];
+            let value = cache[1].to_string();
+
+            CACHE
+                .get()
+                .unwrap()
+                .insert(key.to_string(), Arc::new(value))
+                .await;
+        }
+    }
 }

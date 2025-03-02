@@ -1,6 +1,9 @@
 use colored::Colorize;
 use salvo::{handler, Depot, FlowCtrl, Request, Response};
 use std::time::Instant;
+use tokio::io::AsyncWriteExt;
+
+use crate::CACHE;
 
 #[handler]
 pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl: &mut FlowCtrl) {
@@ -11,18 +14,42 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
     let status = res.status_code.unwrap().as_u16();
     let model = match depot.get::<String>("model") {
         Ok(model) => model,
-        Err(_) => return,
+        Err(_) => "",
     };
 
     let provider = match depot.get::<String>("provider") {
         Ok(provider) => provider,
-        Err(_) => return,
+        Err(_) => "",
     };
+
+    // 每100个请求保存到文件一次
+    let hit_cache = depot.get::<bool>("hit_cache").unwrap_or(&false);
+    if !*hit_cache {
+        let cache = CACHE.get().unwrap();
+
+        if cache.entry_count() % 100 == 0 {
+            let mut file = tokio::fs::OpenOptions::new()
+                .write(true)
+                .append(true)
+                .create(true)
+                .open("cache")
+                .await
+                .unwrap();
+
+            for (k, v) in cache.iter() {
+                file.write_all(format!("{k}\n===\n{v}").as_bytes())
+                    .await
+                    .unwrap();
+                // 添加分隔符
+                file.write_all(b"\n+++\n").await.unwrap();
+            }
+        }
+    }
 
     let ip = get_ip(req).await;
 
     tracing::info!(
-        "IP: {}, Status: {}, Model: {}, Provider: {}, Processing Time: {}",
+        "IP: {}, Status: {}, Model: {}, Provider: {}, Processing Time: {}, Hit Cache: {}",
         ip.green(),
         if status == 200 {
             status.to_string().green()
@@ -31,7 +58,12 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
         },
         model.green(),
         provider.green(),
-        format_duration(duration).green()
+        format_duration(duration).green(),
+        if *hit_cache {
+            "true".green()
+        } else {
+            "false".red()
+        }
     );
 }
 
