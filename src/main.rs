@@ -1,13 +1,13 @@
+use once_cell::sync::OnceCell;
+use quick_cache::sync::Cache;
 use salvo::prelude::*;
 use std::{collections::HashMap, sync::RwLock};
-
-use once_cell::sync::OnceCell;
 
 mod config;
 use config::Config;
 
 mod api;
-use api::{completions, no_think_completions};
+use api::completions;
 
 mod logger;
 use logger::log;
@@ -16,6 +16,7 @@ static CONFIG: OnceCell<Config> = OnceCell::new();
 static CLIENT: OnceCell<reqwest::Client> = OnceCell::new();
 static PROVIDER_USAGE_COUNT: OnceCell<RwLock<HashMap<String, u64>>> = OnceCell::new();
 static KEY_USAGE_COUNT: OnceCell<RwLock<HashMap<String, u64>>> = OnceCell::new();
+static CHACHE: OnceCell<Cache<Vec<String>, String>> = OnceCell::new();
 
 #[tokio::main]
 async fn main() {
@@ -26,7 +27,7 @@ async fn main() {
     let router = Router::new().push(
         Router::with_path("v1").push(
             Router::with_path("chat")
-                .push(Router::with_path("completions").post(no_think_completions))
+                .push(Router::with_path("completions").post(completions))
                 .push(Router::with_path("think_completions").post(completions)),
         ),
     );
@@ -67,4 +68,7 @@ async fn init_source() {
         .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339())
         .with_max_level(tracing::Level::INFO)
         .init();
+
+    // Init Cache
+    CHACHE.set(Cache::new(100000)).unwrap();
 }
