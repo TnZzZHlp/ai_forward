@@ -1,5 +1,4 @@
 use std::convert::Infallible;
-use std::fs;
 use std::sync::Arc;
 
 use eventsource_stream::Eventsource;
