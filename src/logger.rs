@@ -22,12 +22,12 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
         Err(_) => "",
     };
 
-    // 每100个请求保存到文件一次
+    // 每50个请求保存到文件一次
     let hit_cache = depot.get::<bool>("hit_cache").unwrap_or(&false);
     if !*hit_cache {
         let cache = CACHE.get().unwrap();
 
-        if cache.entry_count() % 100 == 0 {
+        if cache.entry_count() % 50 == 0 {
             let mut file = tokio::fs::OpenOptions::new()
                 .write(true)
                 .append(true)
