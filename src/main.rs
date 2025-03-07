@@ -70,7 +70,7 @@ async fn init_source() {
         .init();
 
     // Init Cache
-    CACHE.set(Cache::new(100000)).unwrap();
+    CACHE.set(Cache::new(10000)).unwrap();
     // 如果有缓存文件就加载
     if std::path::Path::new("cache").exists() {
         let caches = std::fs::read_to_string("cache").unwrap();
