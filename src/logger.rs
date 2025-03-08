@@ -36,6 +36,9 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
                 .await
                 .unwrap();
 
+            // 清空文件
+            file.write_all(b"").await.unwrap();
+
             for (k, v) in cache.iter() {
                 file.write_all(format!("{k}\n===\n{v}").as_bytes())
                     .await
