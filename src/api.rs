@@ -1,4 +1,6 @@
 use std::convert::Infallible;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use eventsource_stream::Eventsource;
@@ -191,25 +193,31 @@ async fn reply_cache(req_json: &Value, res: &mut response::Response) -> bool {
             res.headers_mut()
                 .insert("Content-Type", "text/event-stream".parse().unwrap());
 
-            let single_event_stream = stream::once(async move {
-                Ok::<_, Infallible>(
-                    SseEvent::default().text(
-                        json!({
-                            "choices": [
-                                {
-                                    "delta": {
-                                        "content": cached.as_str(),
-                                        "role": "assistant"
+            let event_stream = stream::iter(vec![
+                Box::pin(async move {
+                    Ok::<_, Infallible>(
+                        SseEvent::default().text(
+                            json!({
+                                "choices": [
+                                    {
+                                        "delta": {
+                                            "content": cached.as_str(),
+                                            "role": "assistant"
+                                        }
                                     }
-                                }
-                            ]
-                        })
-                        .to_string(),
-                    ),
-                )
-            });
+                                ]
+                            })
+                            .to_string(),
+                        ),
+                    )
+                })
+                    as Pin<Box<dyn Future<Output = Result<SseEvent, Infallible>> + Send>>,
+                Box::pin(async { Ok::<_, Infallible>(SseEvent::default().text("[DONE]")) })
+                    as Pin<Box<dyn Future<Output = Result<SseEvent, Infallible>> + Send>>,
+            ])
+            .then(|future| future);
 
-            sse::stream(res, single_event_stream);
+            sse::stream(res, event_stream);
         } else {
             // 直接返回
             res.headers_mut()
