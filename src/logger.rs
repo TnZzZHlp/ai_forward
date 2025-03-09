@@ -26,23 +26,32 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
 
     let ip = get_ip(req).await;
 
-    tracing::info!(
-        "IP: {}, Status: {}, Model: {}, Provider: {}, Processing Time: {}, Hit Cache: {}",
-        ip.green(),
-        if status == 200 {
-            status.to_string().green()
-        } else {
-            status.to_string().red()
-        },
-        model.green(),
-        provider.green(),
-        format_duration(duration).green(),
-        if *hit_cache {
-            "true".green()
-        } else {
-            "false".red()
-        }
-    );
+    if *hit_cache {
+        tracing::info!(
+            "IP: {}, Status: {}, Hit Cache: {}, Processing Time: {}",
+            ip.green(),
+            if status == 200 {
+                status.to_string().green()
+            } else {
+                status.to_string().red()
+            },
+            "true".green(),
+            format_duration(duration).green(),
+        );
+    } else {
+        tracing::info!(
+            "IP: {}, Status: {}, Model: {}, Provider: {}, Processing Time: {}",
+            ip.green(),
+            if status == 200 {
+                status.to_string().green()
+            } else {
+                status.to_string().red()
+            },
+            model.green(),
+            provider.green(),
+            format_duration(duration).green(),
+        );
+    }
 }
 
 fn format_duration(duration: std::time::Duration) -> String {
