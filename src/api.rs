@@ -101,8 +101,7 @@ async fn process_normal_reply(
 
     // 记录缓存
     let messages = req_json["messages"].clone();
-    let response = reply["choices"][0]["message"]
-        .clone()
+    let response = reply["choices"][0]["message"]["content"]
         .as_str()
         .unwrap()
         .to_string();
