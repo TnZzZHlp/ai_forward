@@ -1,4 +1,5 @@
 {
+  "database": "postgres://postgres:postgres@localhost:5432/ai_forward",
   "port": 48801,
   "auth": "test",
   "providers": [

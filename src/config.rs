@@ -2,6 +2,8 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
+    pub database: String,
+    pub cache_size: u64,
     pub auth: String,
     pub port: u16,
     pub providers: Vec<Provider>,

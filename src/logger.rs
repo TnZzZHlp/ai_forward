@@ -1,9 +1,9 @@
 use colored::Colorize;
 use salvo::{handler, Depot, FlowCtrl, Request, Response};
-use std::time::Instant;
-use tokio::io::AsyncWriteExt;
+use serde_json::Value;
+use std::{sync::Arc, time::Instant};
 
-use crate::CACHE;
+use crate::{db::DB, CACHE};
 
 #[handler]
 pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl: &mut FlowCtrl) {
@@ -22,32 +22,7 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
         Err(_) => "",
     };
 
-    // 每50个请求保存到文件一次
     let hit_cache = depot.get::<bool>("hit_cache").unwrap_or(&false);
-    if !*hit_cache {
-        let cache = CACHE.get().unwrap();
-
-        if cache.entry_count() % 50 == 0 {
-            let mut file = tokio::fs::OpenOptions::new()
-                .write(true)
-                .append(true)
-                .create(true)
-                .open("cache")
-                .await
-                .unwrap();
-
-            // 清空文件
-            file.write_all(b"").await.unwrap();
-
-            for (k, v) in cache.iter() {
-                file.write_all(format!("{k}\n===\n{v}").as_bytes())
-                    .await
-                    .unwrap();
-                // 添加分隔符
-                file.write_all(b"\n+++\n").await.unwrap();
-            }
-        }
-    }
 
     let ip = get_ip(req).await;
 
@@ -118,4 +93,18 @@ pub async fn get_ip(req: &Request) -> String {
         .unwrap()
         .ip()
         .to_string()
+}
+
+pub async fn record(messages: Value, response: String) {
+    let messages = Arc::new(messages);
+    let response = Arc::new(response);
+
+    let cache = CACHE.get().unwrap();
+    cache.insert(messages.clone(), response.clone()).await;
+
+    // 保存到数据库
+    DB.get()
+        .unwrap()
+        .save_to_db(messages.clone(), response.clone())
+        .await;
 }

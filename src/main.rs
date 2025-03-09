@@ -1,6 +1,7 @@
 use moka::future::Cache;
 use once_cell::sync::OnceCell;
 use salvo::prelude::*;
+use serde_json::Value;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -15,11 +16,14 @@ use api::completions;
 mod logger;
 use logger::log;
 
+mod db;
+use db::{DatabaseClient, DB};
+
 static CONFIG: OnceCell<Config> = OnceCell::new();
 static CLIENT: OnceCell<reqwest::Client> = OnceCell::new();
 static PROVIDER_USAGE_COUNT: OnceCell<RwLock<HashMap<String, u64>>> = OnceCell::new();
 static KEY_USAGE_COUNT: OnceCell<RwLock<HashMap<String, u64>>> = OnceCell::new();
-static CACHE: OnceCell<Cache<String, Arc<String>>> = OnceCell::new();
+static CACHE: OnceCell<Cache<Arc<Value>, Arc<String>>> = OnceCell::new();
 
 #[tokio::main]
 async fn main() {
@@ -67,28 +71,17 @@ async fn init_source() {
     tracing_subscriber::fmt::SubscriberBuilder::default()
         .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339())
         .with_max_level(tracing::Level::INFO)
+        .pretty()
         .init();
 
+    // Init DB
+    DB.set(DatabaseClient::init(CONFIG.get().unwrap().database.clone()).await)
+        .expect("Failed to init DB");
+
     // Init Cache
-    CACHE.set(Cache::new(10000)).unwrap();
-    // 如果有缓存文件就加载
-    if std::path::Path::new("cache").exists() {
-        let caches = std::fs::read_to_string("cache").unwrap();
-        for cache in caches.split("\n+++\n") {
-            if cache.is_empty() {
-                continue;
-            }
-
-            let cache = cache.split("\n===\n").collect::<Vec<&str>>();
-
-            let key = cache[0];
-            let value = cache[1].to_string();
-
-            CACHE
-                .get()
-                .unwrap()
-                .insert(key.to_string(), Arc::new(value))
-                .await;
-        }
-    }
+    CACHE
+        .set(Cache::new(CONFIG.get().unwrap().cache_size))
+        .unwrap();
+    // 加载缓存
+    DB.get().unwrap().load_cache().await;
 }

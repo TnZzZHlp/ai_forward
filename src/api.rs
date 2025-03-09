@@ -8,11 +8,13 @@ use futures::stream::{self, StreamExt};
 use salvo::sse;
 use salvo::{http::request, http::response, prelude::*};
 use serde_json::{json, Value};
+use tokio::spawn;
 use tokio::sync::Mutex;
 use tracing::error;
 
 use crate::config::Provider;
-use crate::{CACHE, CLIENT, CONFIG, KEY_USAGE_COUNT, PROVIDER_USAGE_COUNT};
+use crate::db::DB;
+use crate::{logger, CACHE, CLIENT, CONFIG, KEY_USAGE_COUNT, PROVIDER_USAGE_COUNT};
 
 #[handler]
 pub async fn completions(
@@ -98,19 +100,13 @@ async fn process_normal_reply(
         .insert("Content-Type", "application/json".parse().unwrap());
 
     // 记录缓存
-    CACHE
-        .get()
+    let messages = req_json["messages"].clone();
+    let response = reply["choices"][0]["message"]
+        .clone()
+        .as_str()
         .unwrap()
-        .insert(
-            serde_json::to_string(&req_json["messages"]).unwrap(),
-            Arc::new(
-                reply["choices"][0]["message"]["content"]
-                    .as_str()
-                    .unwrap()
-                    .to_string(),
-            ),
-        )
-        .await;
+        .to_string();
+    spawn(logger::record(messages, response));
 
     res.render(Json(reply));
 }
@@ -129,15 +125,7 @@ async fn process_stream_reply(
         // 等待接收
         rx.recv().await;
         let buffer = buffer_clone.lock().await;
-        // 记录缓存
-        CACHE
-            .get()
-            .unwrap()
-            .insert(
-                serde_json::to_string(&req_json["messages"]).unwrap(),
-                Arc::new(buffer.to_string()),
-            )
-            .await;
+        logger::record(req_json["messages"].clone(), buffer.to_string()).await;
     });
 
     let stream = ai_res.bytes_stream().eventsource().then(move |event| {
@@ -178,15 +166,7 @@ async fn process_stream_reply(
 }
 
 async fn reply_cache(req_json: &Value, res: &mut response::Response) -> bool {
-    let cache = CACHE.get().unwrap();
-    if let Some(cached) = cache
-        .get(
-            serde_json::to_string(&req_json["messages"])
-                .unwrap()
-                .as_str(),
-        )
-        .await
-    {
+    let mut reply = |cached: Arc<String>| {
         // 判断请求类型
         if req_json["stream"].as_bool().unwrap_or(false) {
             // 直接返回
@@ -233,153 +213,25 @@ async fn reply_cache(req_json: &Value, res: &mut response::Response) -> bool {
                 ]
             })));
         }
+    };
+
+    // 查询缓存
+    let cache = CACHE.get().unwrap();
+    if let Some(cached) = cache.get(&req_json["messages"]).await {
+        // 直接返回
+        reply(cached);
         return true;
     }
+
+    // 查询数据库
+    if let Some(ai_request) = DB.get().unwrap().get_from_db(&req_json["messages"]).await {
+        // 直接返回
+        reply(ai_request.response.into());
+        return true;
+    }
+
     false
 }
-
-// #[handler]
-// pub async fn no_think_completions(
-//     res: &mut response::Response,
-//     req: &mut request::Request,
-//     depot: &mut Depot,
-// ) {
-//     // 获取 Authorization
-//     match req.header::<&str>("Authorization") {
-//         Some(auth) => {
-//             if auth != format!("Bearer {}", CONFIG.get().unwrap().auth) {
-//                 res.stuff(
-//                     StatusCode::UNAUTHORIZED,
-//                     Json(json!({ "error": "无效的 Authorization" })),
-//                 );
-//                 return;
-//             }
-//         }
-//         None => {
-//             res.stuff(
-//                 StatusCode::UNAUTHORIZED,
-//                 Json(json!({ "error": "缺少 Authorization" })),
-//             );
-//             return;
-//         }
-//     }
-
-//     // 解析JSON
-//     // https://github.com/hyperium/hyper/issues/3111
-//     // 默认Payload大小为8KB，这里设置为10MB
-//     let payload = req.payload_with_max_size(1024 * 1024 * 10).await.unwrap();
-
-//     let mut json: serde_json::Value =
-//         match serde_json::from_str(std::str::from_utf8(payload).unwrap()) {
-//             Ok(json) => json,
-//             Err(e) => {
-//                 res.stuff(
-//                     StatusCode::BAD_REQUEST,
-//                     Json(json!({ "error": e.to_string() })),
-//                 );
-//                 return;
-//             }
-//         };
-
-//     // 调用AI
-//     match forward(&mut json, depot).await {
-//         Ok((ai_res, model)) => {
-//             if json["stream"].as_bool().unwrap_or(false) {
-//                 let thinked = Arc::new(Mutex::new(false));
-//                 let buffer = Arc::new(Mutex::new(String::new()));
-//                 let model = Arc::new(model);
-
-//                 let stream = ai_res.bytes_stream().eventsource().then(move |event| {
-//                     let thinked = thinked.clone();
-//                     let buffer = buffer.clone();
-//                     let model = model.clone();
-//                     async move {
-//                         match event {
-//                             Ok(event) => {
-//                                 // 如果模型名字不包含r1则代表不支持思考
-//                                 if !model.to_ascii_lowercase().contains("r1") {
-//                                     return Ok(SseEvent::default().text(event.data));
-//                                 }
-
-//                                 if *thinked.lock().await {
-//                                     Ok::<SseEvent, Infallible>(SseEvent::default().text(event.data))
-//                                 } else {
-//                                     let mut json = match serde_json::from_str::<serde_json::Value>(
-//                                         &event.data,
-//                                     ) {
-//                                         Ok(json) => json,
-//                                         Err(_) => {
-//                                             return Ok(SseEvent::default().text(event.data));
-//                                         }
-//                                     };
-
-//                                     // 如果reasoning_content存在则代表思考与输出分离
-//                                     if json["choices"][0]["delta"]["reasoning_content"]
-//                                         .as_str()
-//                                         .is_some()
-//                                     {
-//                                         *thinked.lock().await = true;
-//                                         return Ok(SseEvent::default().text(event.data));
-//                                     }
-
-//                                     let mut buffer = buffer.lock().await;
-
-//                                     // 写入缓冲区
-//                                     buffer.push_str(
-//                                         match json["choices"][0]["delta"]["content"].as_str() {
-//                                             Some(content) => content,
-//                                             None => {
-//                                                 return Ok(SseEvent::default().text(&event.data));
-//                                             }
-//                                         },
-//                                     );
-
-//                                     // 如果有</think>，则认为已经思考完毕
-//                                     if buffer.contains("</think>\n\n") {
-//                                         *thinked.lock().await = true;
-//                                         json["choices"][0]["delta"]["content"] = buffer
-//                                             .split("</think>\n\n")
-//                                             .last()
-//                                             .unwrap()
-//                                             .to_string()
-//                                             .into();
-//                                     } else {
-//                                         json["choices"][0]["delta"]["content"] =
-//                                             String::new().into();
-//                                     }
-
-//                                     Ok(SseEvent::default().json(json).unwrap())
-//                                 }
-//                             }
-//                             Err(e) => Ok(SseEvent::default().text(e.to_string())),
-//                         }
-//                     }
-//                 });
-
-//                 sse::stream(res, stream);
-//                 res.headers_mut()
-//                     .insert("Content-Type", "text/event-stream".parse().unwrap());
-//             } else {
-//                 // 直接返回
-//                 let mut json = ai_res.json::<serde_json::Value>().await.unwrap();
-//                 json["choices"][0]["message"]["content"] = json["choices"][0]["message"]["content"]
-//                     .as_str()
-//                     .unwrap()
-//                     .split("</think>\n\n")
-//                     .last()
-//                     .unwrap()
-//                     .to_string()
-//                     .into();
-//                 res.render(Json(json));
-//                 res.headers_mut()
-//                     .insert("Content-Type", "application/json".parse().unwrap());
-//             }
-//         }
-//         Err(e) => {
-//             res.stuff(StatusCode::INTERNAL_SERVER_ERROR, Json(e));
-//         }
-//     }
-// }
 
 async fn forward(
     json: &mut serde_json::Value,
