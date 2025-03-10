@@ -24,42 +24,36 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
 
     let ip = get_ip(req).await;
 
-    if status != 200 {
-        tracing::info!(
-            "IP: {}, Status: {}, Processing Time: {}",
-            ip.green(),
-            status.to_string().red(),
-            format_duration(duration).green(),
-        );
-        return;
-    }
-
     let hit = depot.get::<&str>("hit_cache").unwrap();
 
-    match hit {
-        &"memory" => {
+    match *hit {
+        "memory" => {
             tracing::info!(
-                "IP: {}, Status: {}, Hit Cache: {}, Processing Time: {}",
+                "IP: {}, Hit Cache: {}, Processing Time: {}",
                 ip.green(),
-                if status == 200 {
-                    status.to_string().green()
-                } else {
-                    status.to_string().red()
-                },
-                "true".green(),
+                "memory".green(),
+                format_duration(duration).green(),
+            );
+        }
+        "db" => {
+            tracing::info!(
+                "IP: {}, Hit Cache: {}, Processing Time: {}",
+                ip.green(),
+                "db".green(),
                 format_duration(duration).green(),
             );
         }
         _ => {
             tracing::info!(
-                "IP: {}, Status: {}, Hit Cache: {}, Processing Time: {}",
+                "IP: {}, Status: {}, Model: {}, Provider: {}, Processing Time: {}",
                 ip.green(),
                 if status == 200 {
                     status.to_string().green()
                 } else {
                     status.to_string().red()
                 },
-                "false".green(),
+                model.green(),
+                provider.green(),
                 format_duration(duration).green(),
             );
         }
