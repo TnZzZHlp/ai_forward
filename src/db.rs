@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -43,15 +41,14 @@ impl DatabaseClient {
             CACHE
                 .get()
                 .unwrap()
-                .insert(row.messages.into(), row.response.into())
-                .await;
+                .insert(row.messages, row.response.into());
         }
     }
 
-    pub async fn save_to_db(&self, messages: Arc<Value>, response: Arc<String>) {
+    pub async fn save_to_db(&self, messages: &Value, response: &String) {
         match sqlx::query("INSERT INTO ai_requests (messages, response) VALUES ($1, $2)")
-            .bind(messages.as_ref())
-            .bind(response.as_ref())
+            .bind(messages)
+            .bind(response)
             .execute(&self.pool)
             .await
         {

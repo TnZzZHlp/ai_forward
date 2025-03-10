@@ -1,5 +1,5 @@
-use moka::future::Cache;
 use once_cell::sync::OnceCell;
+use quick_cache::sync::Cache;
 use salvo::prelude::*;
 use serde_json::Value;
 use std::{
@@ -23,7 +23,7 @@ static CONFIG: OnceCell<Config> = OnceCell::new();
 static CLIENT: OnceCell<reqwest::Client> = OnceCell::new();
 static PROVIDER_USAGE_COUNT: OnceCell<RwLock<HashMap<String, u64>>> = OnceCell::new();
 static KEY_USAGE_COUNT: OnceCell<RwLock<HashMap<String, u64>>> = OnceCell::new();
-static CACHE: OnceCell<Cache<Arc<Value>, Arc<String>>> = OnceCell::new();
+static CACHE: OnceCell<Cache<Value, Arc<String>>> = OnceCell::new();
 
 #[tokio::main]
 async fn main() {
@@ -80,7 +80,7 @@ async fn init_source() {
 
     // Init Cache
     CACHE
-        .set(Cache::new(CONFIG.get().unwrap().cache_size))
+        .set(Cache::new(CONFIG.get().unwrap().cache_size as usize))
         .unwrap();
     // 加载缓存
     DB.get().unwrap().load_cache().await;

@@ -224,7 +224,7 @@ async fn reply_cache(req_json: &Value, res: &mut response::Response, depot: &mut
 
     // 查询缓存
     let cache = CACHE.get().unwrap();
-    if let Some(cached) = cache.get(&req_json["messages"]).await {
+    if let Some(cached) = cache.get(&req_json["messages"]) {
         depot.insert("hit_cache", "memory");
         // 直接返回
         reply(cached);

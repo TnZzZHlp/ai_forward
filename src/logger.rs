@@ -2,7 +2,7 @@ use crate::{db::DB, CACHE};
 use colored::Colorize;
 use salvo::{handler, Depot, FlowCtrl, Request, Response};
 use serde_json::Value;
-use std::{sync::Arc, time::Instant};
+use std::time::Instant;
 
 #[handler]
 pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl: &mut FlowCtrl) {
@@ -18,10 +18,11 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
     match *hit {
         "memory" => {
             tracing::info!(
-                "IP: {}, Hit Cache: {}, Processing Time: {}",
+                "IP: {}, Hit Cache: {}, Processing Time: {}, Cache Hit Rate: {:.2}",
                 ip.green(),
                 "memory".green(),
                 format_duration(duration).green(),
+                get_hit_detail(),
             );
         }
         "db" => {
@@ -110,15 +111,22 @@ pub async fn get_ip(req: &Request) -> String {
 }
 
 pub async fn record(messages: Value, response: String) {
-    let messages = Arc::new(messages);
-    let response = Arc::new(response);
-
-    let cache = CACHE.get().unwrap();
-    cache.insert(messages.clone(), response.clone()).await;
-
     // 保存到数据库
-    DB.get()
+    DB.get().unwrap().save_to_db(&messages, &response).await;
+
+    CACHE
+        .get()
         .unwrap()
-        .save_to_db(messages.clone(), response.clone())
-        .await;
+        .insert(messages.clone(), response.into());
+}
+
+fn get_hit_detail() -> String {
+    let cache = CACHE.get().unwrap();
+    let hits = cache.hits();
+    let misses = cache.misses();
+    let len = cache.len();
+
+    let hit_rate = (hits as f64 / (hits + misses) as f64) * 100.0;
+
+    format!("Hit Rate: {:.2}%, Len: {}", hit_rate, len)
 }
