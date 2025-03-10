@@ -11,17 +11,6 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
     ctrl.call_next(req, depot, res).await;
     let duration = now.elapsed();
 
-    let status = res.status_code.unwrap().as_u16();
-    let model = match depot.get::<String>("model") {
-        Ok(model) => model,
-        Err(_) => "",
-    };
-
-    let provider = match depot.get::<String>("provider") {
-        Ok(provider) => provider,
-        Err(_) => "",
-    };
-
     let ip = get_ip(req).await;
 
     let hit = depot.get::<&str>("hit_cache").unwrap_or(&"none");
@@ -44,19 +33,29 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
             );
         }
         _ => {
-            tracing::info!(
-                "IP: {}, Status: {}, Model: {}, Provider: {}, Processing Time: {}",
-                ip.green(),
-                if status == 200 {
-                    status.to_string().green()
-                } else {
-                    status.to_string().red()
-                },
-                model.green(),
-                provider.green(),
-                format_duration(duration).green(),
-            );
+            if let (Ok(model), Ok(provider), Some(status_code)) = (
+                depot.get::<String>("model"),
+                depot.get::<String>("provider"),
+                res.status_code,
+            ) {
+                tracing::info!(
+                    "IP: {}, Status: {}, Model: {}, Provider: {}, Processing Time: {}",
+                    ip.green(),
+                    color_status(status_code.as_u16()).green(),
+                    model.green(),
+                    provider.green(),
+                    format_duration(duration).green(),
+                );
+            }
         }
+    }
+}
+
+fn color_status(status_code: u16) -> String {
+    if status_code == 200 {
+        format!("{}", status_code).green().to_string()
+    } else {
+        format!("{}", status_code).red().to_string()
     }
 }
 
