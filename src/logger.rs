@@ -27,10 +27,11 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
         }
         "db" => {
             tracing::info!(
-                "IP: {}, Hit Cache: {}, Processing Time: {}",
+                "IP: {}, Hit Cache: {}, Processing Time: {}, {}",
                 ip.green(),
                 "db".green(),
                 format_duration(duration).green(),
+                get_hit_detail()
             );
         }
         _ => {
@@ -40,12 +41,13 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
                 res.status_code,
             ) {
                 tracing::info!(
-                    "IP: {}, Status: {}, Model: {}, Provider: {}, Processing Time: {}",
+                    "IP: {}, Status: {}, Model: {}, Provider: {}, Processing Time: {}, {}",
                     ip.green(),
                     color_status(status_code.as_u16()).green(),
                     model.green(),
                     provider.green(),
                     format_duration(duration).green(),
+                    get_hit_detail()
                 );
             }
         }
@@ -124,13 +126,13 @@ fn get_hit_detail() -> String {
     let cache = CACHE.get().unwrap();
     let hits = cache.hits();
     let misses = cache.misses();
-    let len = cache.len();
+    let cache_count = cache.len();
 
     let hit_rate = (hits as f64 / (hits + misses) as f64) * 100.0;
 
     format!(
-        "Hit Rate: {:.2}%, Len: {}",
-        hit_rate.to_string().green(),
-        len.to_string().green()
+        "Hit Rate: {}, Mem Cache Count: {}",
+        format!("{:.2}%", hit_rate).green(),
+        cache_count.to_string().green()
     )
 }
