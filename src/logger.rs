@@ -24,7 +24,7 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
 
     let ip = get_ip(req).await;
 
-    let hit = depot.get::<&str>("hit_cache").unwrap();
+    let hit = depot.get::<&str>("hit_cache").unwrap_or(&"none");
 
     match *hit {
         "memory" => {
