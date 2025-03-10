@@ -18,7 +18,7 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
     match *hit {
         "memory" => {
             tracing::info!(
-                "IP: {}, Hit Cache: {}, Processing Time: {}, Cache Hit Rate: {:.2}",
+                "IP: {}, Hit Cache: {}, Processing Time: {}, {}",
                 ip.green(),
                 "memory".green(),
                 format_duration(duration).green(),
@@ -128,5 +128,9 @@ fn get_hit_detail() -> String {
 
     let hit_rate = (hits as f64 / (hits + misses) as f64) * 100.0;
 
-    format!("Hit Rate: {:.2}%, Len: {}", hit_rate, len)
+    format!(
+        "Hit Rate: {:.2}%, Len: {}",
+        hit_rate.to_string().green(),
+        len.to_string().green()
+    )
 }
