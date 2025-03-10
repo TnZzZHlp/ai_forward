@@ -1,12 +1,12 @@
+use crate::{db::DB, CACHE};
 use colored::Colorize;
 use salvo::{handler, Depot, FlowCtrl, Request, Response};
 use serde_json::Value;
 use std::{sync::Arc, time::Instant};
 
-use crate::{db::DB, CACHE};
-
 #[handler]
 pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl: &mut FlowCtrl) {
+    // 记录请求的开始时间
     let now = Instant::now();
     ctrl.call_next(req, depot, res).await;
     let duration = now.elapsed();
@@ -25,6 +25,16 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
     let hit_cache = depot.get::<bool>("hit_cache").unwrap_or(&false);
 
     let ip = get_ip(req).await;
+
+    if status != 200 {
+        tracing::info!(
+            "IP: {}, Status: {}, Processing Time: {}",
+            ip.green(),
+            status.to_string().red(),
+            format_duration(duration).green(),
+        );
+        return;
+    }
 
     if *hit_cache {
         tracing::info!(
