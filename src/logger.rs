@@ -22,8 +22,6 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
         Err(_) => "",
     };
 
-    let hit_cache = depot.get::<bool>("hit_cache").unwrap_or(&false);
-
     let ip = get_ip(req).await;
 
     if status != 200 {
@@ -36,31 +34,35 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
         return;
     }
 
-    if *hit_cache {
-        tracing::info!(
-            "IP: {}, Status: {}, Hit Cache: {}, Processing Time: {}",
-            ip.green(),
-            if status == 200 {
-                status.to_string().green()
-            } else {
-                status.to_string().red()
-            },
-            "true".green(),
-            format_duration(duration).green(),
-        );
-    } else {
-        tracing::info!(
-            "IP: {}, Status: {}, Model: {}, Provider: {}, Processing Time: {}",
-            ip.green(),
-            if status == 200 {
-                status.to_string().green()
-            } else {
-                status.to_string().red()
-            },
-            model.green(),
-            provider.green(),
-            format_duration(duration).green(),
-        );
+    let hit = depot.get::<&str>("hit_cache").unwrap();
+
+    match hit {
+        &"memory" => {
+            tracing::info!(
+                "IP: {}, Status: {}, Hit Cache: {}, Processing Time: {}",
+                ip.green(),
+                if status == 200 {
+                    status.to_string().green()
+                } else {
+                    status.to_string().red()
+                },
+                "true".green(),
+                format_duration(duration).green(),
+            );
+        }
+        _ => {
+            tracing::info!(
+                "IP: {}, Status: {}, Hit Cache: {}, Processing Time: {}",
+                ip.green(),
+                if status == 200 {
+                    status.to_string().green()
+                } else {
+                    status.to_string().red()
+                },
+                "false".green(),
+                format_duration(duration).green(),
+            );
+        }
     }
 }
 

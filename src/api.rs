@@ -69,8 +69,7 @@ pub async fn completions(
         };
 
     // 查询缓存
-    if reply_cache(&req_json, res).await {
-        depot.insert("hit_cache", true);
+    if reply_cache(&req_json, res, depot).await {
         return;
     }
 
@@ -173,7 +172,7 @@ async fn process_stream_reply(
         .insert("Content-Type", "text/event-stream".parse().unwrap());
 }
 
-async fn reply_cache(req_json: &Value, res: &mut response::Response) -> bool {
+async fn reply_cache(req_json: &Value, res: &mut response::Response, depot: &mut Depot) -> bool {
     let mut reply = |cached: Arc<String>| {
         // 判断请求类型
         if req_json["stream"].as_bool().unwrap_or(false) {
@@ -226,6 +225,7 @@ async fn reply_cache(req_json: &Value, res: &mut response::Response) -> bool {
     // 查询缓存
     let cache = CACHE.get().unwrap();
     if let Some(cached) = cache.get(&req_json["messages"]).await {
+        depot.insert("hit_cache", "memory");
         // 直接返回
         reply(cached);
         return true;
@@ -233,6 +233,7 @@ async fn reply_cache(req_json: &Value, res: &mut response::Response) -> bool {
 
     // 查询数据库
     if let Some(ai_request) = DB.get().unwrap().get_from_db(&req_json["messages"]).await {
+        depot.insert("hit_cache", "db");
         // 直接返回
         reply(ai_request.response.into());
         return true;
