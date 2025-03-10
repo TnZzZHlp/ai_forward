@@ -48,12 +48,11 @@ impl DatabaseClient {
     }
 
     pub async fn save_to_db(&self, messages: Arc<Value>, response: Arc<String>) {
-        sqlx::query("INSERT INTO ai_requests (messages, response) VALUES ($1, $2)")
+        let _ = sqlx::query("INSERT INTO ai_requests (messages, response) VALUES ($1, $2)")
             .bind(messages.as_ref())
             .bind(response.as_ref())
             .execute(&self.pool)
-            .await
-            .unwrap();
+            .await;
     }
 
     pub async fn get_from_db(&self, messages: &Value) -> Option<AIRequest> {
