@@ -4,6 +4,7 @@ use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{query_as, Postgres};
+use tracing::trace;
 
 pub static DB: OnceCell<DatabaseClient> = OnceCell::new();
 
@@ -48,11 +49,30 @@ impl DatabaseClient {
     }
 
     pub async fn save_to_db(&self, messages: Arc<Value>, response: Arc<String>) {
-        let _ = sqlx::query("INSERT INTO ai_requests (messages, response) VALUES ($1, $2)")
+        match sqlx::query("INSERT INTO ai_requests (messages, response) VALUES ($1, $2)")
             .bind(messages.as_ref())
             .bind(response.as_ref())
             .execute(&self.pool)
-            .await;
+            .await
+        {
+            Ok(_) => {
+                // Successfully inserted
+                trace!(
+                    "Inserted into database: messages = {:?}, response = {:?}",
+                    messages,
+                    response
+                );
+            }
+            Err(e) => {
+                // Handle error
+                trace!(
+                    "Failed to insert into database: messages = {:?}, response = {:?}, error = {}",
+                    messages,
+                    response,
+                    e
+                );
+            }
+        };
     }
 
     pub async fn get_from_db(&self, messages: &Value) -> Option<AIRequest> {
