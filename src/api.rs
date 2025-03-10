@@ -45,7 +45,7 @@ pub async fn completions(
     // 解析JSON
     // https://github.com/hyperium/hyper/issues/3111
     // 默认Payload大小为8KB，这里设置为10MB
-    let payload = match req.parse_body_with_max_size(1024 * 1024 * 10).await {
+    let payload = match req.payload_with_max_size(1024 * 1024 * 10).await {
         Ok(payload) => payload,
         Err(e) => {
             res.stuff(
