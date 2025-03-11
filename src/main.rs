@@ -3,7 +3,7 @@ use once_cell::sync::OnceCell;
 use quick_cache::sync::Cache;
 use salvo::prelude::*;
 use serde_json::Value;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 mod config;
 use config::Config;
