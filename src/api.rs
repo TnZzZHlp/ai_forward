@@ -328,20 +328,17 @@ async fn forward(
 
 async fn select_provider(providers: Vec<&Provider>) -> Result<&Provider, String> {
     // 找到PROVIDER_USAGE_COUNT中使用次数最少的提供者
-    let count = PROVIDER_USAGE_COUNT.get().unwrap().read().unwrap();
-    let provider = match providers
-        .iter()
-        .min_by_key(|x| count.get(&x.name).unwrap_or(&0))
-    {
+    let count = PROVIDER_USAGE_COUNT.get().unwrap();
+    let provider = match providers.iter().min_by_key(|x| match count.get(&x.name) {
+        Some(ref_val) => *ref_val,
+        None => 0,
+    }) {
         Some(provider) => provider,
         None => {
             return Err("没有找到能处理该模型的提供者".to_string());
         }
     };
 
-    drop(count);
-
-    let mut count = PROVIDER_USAGE_COUNT.get().unwrap().write().unwrap();
     *count.entry(provider.name.clone()).or_insert(0) += 1;
 
     Ok(provider)
@@ -349,21 +346,16 @@ async fn select_provider(providers: Vec<&Provider>) -> Result<&Provider, String>
 
 async fn select_key(provider: &Provider) -> Result<&str, String> {
     // 在Provider中找到KEY_USAGE_COUNT中使用次数最少的提供者
-    let count = KEY_USAGE_COUNT.get().unwrap().read().unwrap();
-    let key = match provider
-        .keys
-        .iter()
-        .min_by_key(|x| count.get(*x).unwrap_or(&0))
-    {
+    let count = KEY_USAGE_COUNT.get().unwrap();
+    let key = match provider.keys.iter().min_by_key(|x| match count.get(*x) {
+        Some(ref_val) => *ref_val,
+        None => 0,
+    }) {
         Some(key) => key,
         None => {
             return Err(format!("提供者 {} 没有可用的密钥", provider.name));
         }
     };
-
-    drop(count);
-
-    let mut count = KEY_USAGE_COUNT.get().unwrap().write().unwrap();
 
     *count.entry(key.to_string()).or_insert(0) += 1;
 

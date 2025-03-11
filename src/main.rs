@@ -1,11 +1,9 @@
+use dashmap::DashMap;
 use once_cell::sync::OnceCell;
 use quick_cache::sync::Cache;
 use salvo::prelude::*;
 use serde_json::Value;
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
 mod config;
 use config::Config;
@@ -21,8 +19,8 @@ use db::{DatabaseClient, DB};
 
 static CONFIG: OnceCell<Config> = OnceCell::new();
 static CLIENT: OnceCell<reqwest::Client> = OnceCell::new();
-static PROVIDER_USAGE_COUNT: OnceCell<RwLock<HashMap<String, u64>>> = OnceCell::new();
-static KEY_USAGE_COUNT: OnceCell<RwLock<HashMap<String, u64>>> = OnceCell::new();
+static PROVIDER_USAGE_COUNT: OnceCell<DashMap<String, u64>> = OnceCell::new();
+static KEY_USAGE_COUNT: OnceCell<DashMap<String, u64>> = OnceCell::new();
 static CACHE: OnceCell<Cache<Value, Arc<String>>> = OnceCell::new();
 
 #[tokio::main]
@@ -60,12 +58,10 @@ async fn init_source() {
         .unwrap();
 
     // Init Provider Usage Count
-    PROVIDER_USAGE_COUNT
-        .set(RwLock::new(HashMap::new()))
-        .unwrap();
+    PROVIDER_USAGE_COUNT.set(DashMap::new()).unwrap();
 
     // Init Key Usage Count
-    KEY_USAGE_COUNT.set(RwLock::new(HashMap::new())).unwrap();
+    KEY_USAGE_COUNT.set(DashMap::new()).unwrap();
 
     // Init Logger
     tracing_subscriber::fmt::SubscriberBuilder::default()
