@@ -56,6 +56,12 @@ pub async fn completions(
         }
     };
 
+    // 如果Payload大于8KB则不缓存
+    let mut cache = true;
+    if payload.len() > 8 * 1024 {
+        cache = false;
+    }
+
     let mut req_json: serde_json::Value =
         match serde_json::from_str(std::str::from_utf8(payload).unwrap()) {
             Ok(json) => json,
@@ -75,11 +81,11 @@ pub async fn completions(
 
     // 调用AI
     match forward(&mut req_json, depot).await {
-        Ok((ai_res, _)) => {
+        Ok(ai_res) => {
             if req_json["stream"].as_bool().unwrap_or(false) {
-                process_stream_reply(res, ai_res, req_json).await;
+                process_stream_reply(res, ai_res, req_json, cache).await;
             } else {
-                process_normal_reply(res, ai_res, req_json).await;
+                process_normal_reply(res, ai_res, req_json, cache).await;
             }
         }
         Err(e) => {
@@ -92,6 +98,7 @@ async fn process_normal_reply(
     res: &mut response::Response,
     ai_res: reqwest::Response,
     req_json: Value,
+    cache: bool,
 ) {
     // 直接返回
     let reply = match ai_res.json::<Value>().await {
@@ -108,12 +115,14 @@ async fn process_normal_reply(
         .insert("Content-Type", "application/json".parse().unwrap());
 
     // 记录缓存
-    let messages = req_json["messages"].clone();
-    let response = reply["choices"][0]["message"]["content"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    spawn(logger::record(messages, response));
+    if cache {
+        let messages = req_json["messages"].clone();
+        let response = reply["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        spawn(logger::record(messages, response));
+    }
 
     res.render(Json(reply));
 }
@@ -122,18 +131,21 @@ async fn process_stream_reply(
     res: &mut response::Response,
     ai_res: reqwest::Response,
     req_json: Value,
+    cache: bool,
 ) {
     let buffer = Arc::new(Mutex::new(String::new()));
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<bool>(1);
 
     // 缓存
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<bool>(1);
-    let buffer_clone = Arc::clone(&buffer);
-    tokio::spawn(async move {
-        // 等待接收
-        rx.recv().await;
-        let buffer = buffer_clone.lock().await;
-        logger::record(req_json["messages"].clone(), buffer.to_string()).await;
-    });
+    if cache {
+        let buffer_clone = Arc::clone(&buffer);
+        tokio::spawn(async move {
+            // 等待接收
+            rx.recv().await;
+            let buffer = buffer_clone.lock().await;
+            logger::record(req_json["messages"].clone(), buffer.to_string()).await;
+        });
+    }
 
     let stream = ai_res.bytes_stream().eventsource().then(move |event| {
         let buffer = buffer.clone();
@@ -245,7 +257,7 @@ async fn reply_cache(req_json: &Value, res: &mut response::Response, depot: &mut
 async fn forward(
     json: &mut serde_json::Value,
     depot: &mut Depot,
-) -> Result<(reqwest::Response, String), serde_json::Value> {
+) -> Result<reqwest::Response, serde_json::Value> {
     // 获取模型
     let model = match json["model"].as_str() {
         Some(model) => model,
@@ -323,7 +335,7 @@ async fn forward(
     depot.insert("model", model.to_string());
     depot.insert("provider", provider.name.clone());
 
-    Ok((resp, model.to_string()))
+    Ok(resp)
 }
 
 async fn select_provider(providers: Vec<&Provider>) -> Result<&Provider, String> {
