@@ -246,8 +246,16 @@ async fn reply_cache(req_json: &Value, res: &mut response::Response, depot: &mut
     // 查询数据库
     if let Some(ai_request) = DB.get().unwrap().get_from_db(&req_json["messages"]).await {
         depot.insert("hit_cache", "db");
+        let response = Arc::new(ai_request.response);
+
+        // 将缓存重新插入内存
+        CACHE
+            .get()
+            .unwrap()
+            .insert(req_json["messages"].clone(), response.clone());
+
         // 直接返回
-        reply(ai_request.response.into());
+        reply(response);
         return true;
     }
 
