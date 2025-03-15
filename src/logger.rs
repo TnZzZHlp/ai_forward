@@ -43,7 +43,7 @@ pub async fn log(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl:
                 tracing::info!(
                     "IP: {}, Status: {}, Model: {}, Provider: {}, Processing Time: {}, {}",
                     ip.green(),
-                    color_status(status_code.as_u16()).green(),
+                    color_status(status_code.as_u16()),
                     model.green(),
                     provider.green(),
                     format_duration(duration).green(),
