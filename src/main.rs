@@ -65,9 +65,11 @@ async fn init_source() {
 
     // Init Logger
     tracing_subscriber::fmt::SubscriberBuilder::default()
-        .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339())
+        .with_timer(tracing_subscriber::fmt::time::ChronoLocal::new(
+            String::from("%Y-%m-%d %H:%M:%S"),
+        ))
+        .with_target(false)
         .with_max_level(tracing::Level::INFO)
-        .pretty()
         .init();
 
     // Init DB
