@@ -75,7 +75,7 @@ pub async fn completions(
         };
 
     // 查询缓存
-    if reply_cache(&req_json, res, depot).await {
+    if cache && reply_cache(&req_json, res, depot).await {
         return;
     }
 
