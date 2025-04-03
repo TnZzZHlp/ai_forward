@@ -189,8 +189,7 @@ async fn reply_cache(req_json: &Value, res: &mut response::Response, depot: &mut
         // 判断请求类型
         if req_json["stream"].as_bool().unwrap_or(false) {
             // 直接返回
-            res.headers_mut()
-                .insert("Content-Type", "text/event-stream".parse().unwrap());
+            res.add_header("Content-Type", "text/event-stream", false);
 
             let event_stream = stream::iter(vec![
                 Box::pin(async move {
