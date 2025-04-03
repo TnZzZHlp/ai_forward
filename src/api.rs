@@ -157,7 +157,7 @@ async fn process_stream_reply(
                         Ok(json) => json,
                         Err(_) => {
                             // 解析失败意味流结束，发送信号记录缓存
-                            tx.send(true).await.unwrap();
+                            let _ = tx.send(true).await;
                             return Ok::<_, Infallible>(SseEvent::default().text(event.data));
                         }
                     };
@@ -189,7 +189,8 @@ async fn reply_cache(req_json: &Value, res: &mut response::Response, depot: &mut
         // 判断请求类型
         if req_json["stream"].as_bool().unwrap_or(false) {
             // 直接返回
-            res.add_header("Content-Type", "text/event-stream", false);
+            res.add_header("Content-Type", "text/event-stream", false)
+                .unwrap();
 
             let event_stream = stream::iter(vec![
                 Box::pin(async move {
