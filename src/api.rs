@@ -56,9 +56,9 @@ pub async fn completions(
         }
     };
 
-    // 如果Payload大于16KB则不缓存
+    // 如果Payload大于8KB则不缓存
     let mut cache = true;
-    if payload.len() > 16 * 1024 {
+    if payload.len() > 8 * 1024 {
         cache = false;
     }
 
