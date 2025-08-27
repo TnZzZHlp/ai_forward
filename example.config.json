@@ -1,0 +1,40 @@
+{
+    "port": 48801,
+    "auth": "test111",
+    "log": {
+        "level": "info",
+        "file": "./logs/ai_forward.log",
+        "max_files": 5,
+        "max_file_size": 10485760
+    },
+    "providers": [
+        {
+            "name": "openai",
+            "models": [
+                {
+                    "alias": "gpt-4",
+                    "model": "gpt-4"
+                },
+                {
+                    "alias": "gpt-3.5-turbo",
+                    "model": "gpt-3.5-turbo"
+                }
+            ],
+            "url": "https://api.openai.com/v1/chat/completions",
+            "keys": ["your-openai-api-key-1", "your-openai-api-key-2"],
+            "timeout": 60,
+            "retry_count": 3
+        },
+        {
+            "name": "anthropic",
+            "models": [
+                {
+                    "alias": "claude-3",
+                    "model": "claude-3-sonnet-20240229"
+                }
+            ],
+            "url": "https://api.anthropic.com/v1/messages",
+            "keys": ["your-anthropic-api-key"]
+        }
+    ]
+}
