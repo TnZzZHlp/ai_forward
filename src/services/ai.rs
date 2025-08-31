@@ -1,8 +1,4 @@
-use axum::{
-    body::Body,
-    http::{HeaderMap, StatusCode},
-    response::Response,
-};
+use axum::{body::Body, http::HeaderMap, response::Response};
 use serde_json::{json, Value};
 use tracing::{debug, error};
 
@@ -121,12 +117,12 @@ impl AIService {
             }
         }
 
-        // 获取响应体作为字节流
-        let response_bytes = response.bytes().await?;
-        let body = Body::from(response_bytes);
+        // 直接使用响应的字节流
+        let status = response.status();
+        let body = Body::from_stream(response.bytes_stream());
 
         // 构建响应
-        let mut axum_response = Response::builder().status(StatusCode::OK);
+        let mut axum_response = Response::builder().status(status);
 
         // 添加响应头
         if let Some(headers) = axum_response.headers_mut() {
