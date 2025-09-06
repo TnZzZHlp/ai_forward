@@ -17,7 +17,6 @@ impl AppState {
     pub async fn new(config: Config) -> AppResult<Self> {
         let http_client = reqwest::Client::builder()
             .connect_timeout(std::time::Duration::from_secs(10))
-            .timeout(std::time::Duration::from_secs(60))
             .build()?;
 
         Ok(Self {
