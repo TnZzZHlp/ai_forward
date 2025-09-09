@@ -1,4 +1,5 @@
 use axum::{
+    extract::DefaultBodyLimit,
     response::Json,
     routing::{get, post},
     Router,
@@ -93,6 +94,7 @@ fn create_router(app_state: AppState) -> Router {
                 .layer(axum::middleware::from_fn(response_time_handler)),
         )
         .with_state(app_state)
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // 设置请求体最大为100MB
 }
 
 async fn health_check() -> Json<serde_json::Value> {
