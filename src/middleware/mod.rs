@@ -5,8 +5,7 @@ use axum::{
     response::{IntoResponse, Json, Response},
 };
 use serde_json::json;
-use std::time::Instant;
-use tracing::{info, warn};
+use tracing::warn;
 
 use crate::state::AppState;
 
@@ -33,27 +32,4 @@ pub async fn auth_handler(State(app_state): State<AppState>, req: Request, next:
     }));
 
     (StatusCode::UNAUTHORIZED, error_response).into_response()
-}
-
-pub async fn logging_handler(req: Request, next: Next) -> Response {
-    let start = Instant::now();
-    let method = req.method().clone();
-    let path = req.uri().path().to_string();
-
-    info!("Request: {} {}", method, path);
-
-    let response = next.run(req).await;
-
-    let duration = start.elapsed();
-    info!("Response: {} {} - {}ms", method, path, duration.as_millis());
-
-    response
-}
-
-pub async fn response_time_handler(req: Request, next: Next) -> Response {
-    let _start = Instant::now();
-    let response = next.run(req).await;
-    let _duration = _start.elapsed();
-
-    response
 }
