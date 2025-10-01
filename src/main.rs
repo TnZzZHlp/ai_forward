@@ -15,7 +15,6 @@ mod config;
 mod error;
 mod handlers;
 mod middleware;
-mod models;
 mod services;
 mod state;
 
