@@ -81,11 +81,7 @@ fn create_router(app_state: AppState) -> Router {
 
     let manage_routes = Router::new()
         .route("/stats", get(stats::get_stats))
-        .route("/reset", post(stats::reset_stats))
-        .layer(axum::middleware::from_fn_with_state(
-            app_state.clone(),
-            auth_handler,
-        ));
+        .route("/reset", post(stats::reset_stats));
 
     Router::new()
         .merge(ai_routes)
