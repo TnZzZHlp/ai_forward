@@ -90,7 +90,7 @@ fn create_router(app_state: AppState) -> Router {
             ServiceBuilder::new().layer(
                 TraceLayer::new_for_http()
                     .make_span_with(
-                        tower_http::trace::DefaultMakeSpan::new().level(tracing::Level::DEBUG),
+                        tower_http::trace::DefaultMakeSpan::new().level(tracing::Level::INFO),
                     )
                     .on_request(
                         tower_http::trace::DefaultOnRequest::new().level(tracing::Level::DEBUG),
