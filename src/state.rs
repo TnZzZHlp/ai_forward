@@ -98,20 +98,46 @@ impl AppState {
 
     pub async fn get_provider_by_model(&self, model: &str) -> Option<crate::config::Provider> {
         let config = self.config.read().await;
-        config
-            .providers
-            .iter()
-            .find(|provider| provider.models.iter().any(|m| m.alias == model))
-            .cloned()
+
+        // 检查是否是 provider:model 格式
+        if let Some((provider_name, _model_name)) = model.split_once(':') {
+            // 如果是 provider:model 格式，直接查找对应的provider
+            config
+                .providers
+                .iter()
+                .find(|provider| provider.name == provider_name)
+                .cloned()
+        } else {
+            // 如果不是 provider:model 格式，使用原来的查找逻辑
+            config
+                .providers
+                .iter()
+                .find(|provider| provider.models.iter().any(|m| m.alias == model))
+                .cloned()
+        }
     }
 
     pub async fn get_model_mapping(&self, alias: &str) -> Option<String> {
         let config = self.config.read().await;
-        for provider in &config.providers {
-            if let Some(model) = provider.models.iter().find(|m| m.alias == alias) {
-                return Some(model.model.clone());
+
+        // 检查是否是 provider:model 格式
+        if let Some((provider_name, model_name)) = alias.split_once(':') {
+            // 如果是 provider:model 格式，查找对应的provider和model
+            for provider in &config.providers {
+                if provider.name == provider_name {
+                    // 如果provider找到了，返回model名称（即冒号后面的部分）
+                    return Some(model_name.to_string());
+                }
             }
+            None
+        } else {
+            // 如果不是 provider:model 格式，使用原来的查找逻辑
+            for provider in &config.providers {
+                if let Some(model) = provider.models.iter().find(|m| m.alias == alias) {
+                    return Some(model.model.clone());
+                }
+            }
+            None
         }
-        None
     }
 }
