@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::config::Config;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -25,6 +25,16 @@ impl AppState {
             provider_usage: Arc::new(RwLock::new(DashMap::new())),
             key_usage: Arc::new(RwLock::new(DashMap::new())),
         })
+    }
+
+    pub async fn reload_config(&self) -> AppResult<()> {
+        let new_config = Config::new()?;
+        let mut config_clone = self.config.clone();
+        let config_arc = Arc::get_mut(&mut config_clone).ok_or_else(|| {
+            AppError::Internal("Failed to get mutable reference to config".into())
+        })?;
+        *config_arc = new_config;
+        Ok(())
     }
 
     pub fn get_provider_by_model(&self, model: &str) -> Option<&crate::config::Provider> {

@@ -81,7 +81,7 @@ fn create_router(app_state: AppState) -> Router {
 
     let manage_routes = Router::new()
         .route("/stats", get(stats::get_stats))
-        .route("/reset", post(stats::reset_stats));
+        .route("/reset", get(stats::reset_stats));
 
     Router::new()
         .merge(ai_routes)
