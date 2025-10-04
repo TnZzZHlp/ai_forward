@@ -34,8 +34,8 @@ pub async fn chat_completions(
 }
 
 pub async fn list_models(State(app_state): State<AppState>) -> impl IntoResponse {
-    let models: Vec<Value> = app_state
-        .config
+    let config = app_state.config.read().await;
+    let models: Vec<Value> = config
         .providers
         .iter()
         .flat_map(|provider| &provider.models)

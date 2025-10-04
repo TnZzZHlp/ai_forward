@@ -68,10 +68,11 @@ impl AIService {
         let provider = self
             .state
             .get_provider_by_model(&model)
+            .await
             .ok_or_else(|| AppError::Validation(format!("Model '{}' not found", model)))?;
 
         // 获取真实模型名称
-        let real_model = self.state.get_model_mapping(&model).ok_or_else(|| {
+        let real_model = self.state.get_model_mapping(&model).await.ok_or_else(|| {
             AppError::Validation(format!("Model mapping not found for '{}'", model))
         })?;
 
@@ -79,7 +80,7 @@ impl AIService {
         payload["model"] = Value::String(real_model);
 
         // 选择API密钥
-        let api_key = self.select_api_key(provider).await?;
+        let api_key = self.select_api_key(&provider).await?;
 
         // 直接转发请求并返回流式响应
         let response = self
@@ -93,7 +94,7 @@ impl AIService {
             .await?;
 
         // 更新使用统计
-        self.update_usage_stats(provider, &api_key).await;
+        self.update_usage_stats(&provider, &api_key).await;
 
         // 检查响应状态
         if !response.status().is_success() {

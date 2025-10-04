@@ -41,7 +41,6 @@ impl IntoResponse for AppError {
         let error_response = json!({
             "error": {
                 "message": error_msg,
-                "type": format!("{:?}", self).split('(').next().unwrap_or("Unknown"),
             }
         });
 
