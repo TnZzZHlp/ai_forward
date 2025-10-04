@@ -1,58 +1,30 @@
 use crate::config::ConfigError;
 use axum::{
     http::StatusCode,
-    response::{Json, IntoResponse, Response},
+    response::{IntoResponse, Json, Response},
 };
 use serde_json::json;
-use std::fmt;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum AppError {
-    Database(sqlx::Error),
-    Http(reqwest::Error),
-    Json(serde_json::Error),
-    Config(ConfigError),
+    #[error("Database error: {0}")]
+    Database(#[from] sqlx::Error),
+
+    #[error("HTTP error: {0}")]
+    Http(#[from] reqwest::Error),
+
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    #[error("Configuration error: {0}")]
+    Config(#[from] ConfigError),
+
+    #[error("Validation error: {0}")]
     Validation(String),
+
+    #[error("Internal error: {0}")]
     Internal(String),
-}
-
-impl fmt::Display for AppError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AppError::Database(e) => write!(f, "Database error: {}", e),
-            AppError::Http(e) => write!(f, "HTTP error: {}", e),
-            AppError::Json(e) => write!(f, "JSON error: {}", e),
-            AppError::Config(e) => write!(f, "Configuration error: {}", e),
-            AppError::Validation(msg) => write!(f, "Validation error: {}", msg),
-            AppError::Internal(msg) => write!(f, "Internal error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for AppError {}
-
-impl From<sqlx::Error> for AppError {
-    fn from(err: sqlx::Error) -> Self {
-        AppError::Database(err)
-    }
-}
-
-impl From<reqwest::Error> for AppError {
-    fn from(err: reqwest::Error) -> Self {
-        AppError::Http(err)
-    }
-}
-
-impl From<serde_json::Error> for AppError {
-    fn from(err: serde_json::Error) -> Self {
-        AppError::Json(err)
-    }
-}
-
-impl From<ConfigError> for AppError {
-    fn from(err: ConfigError) -> Self {
-        AppError::Config(err)
-    }
 }
 
 impl IntoResponse for AppError {

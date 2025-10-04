@@ -1,17 +1,11 @@
 use serde::Deserialize;
 use std::env;
 use std::fs;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[error("{0}")]
 pub struct ConfigError(pub String);
-
-impl std::fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl std::error::Error for ConfigError {}
 
 pub type ConfigResult<T> = Result<T, ConfigError>;
 
