@@ -20,10 +20,11 @@
                     "model": "gpt-3.5-turbo"
                 }
             ],
-            "url": "https://api.openai.com/v1/chat/completions",
-            "keys": ["your-openai-api-key-1", "your-openai-api-key-2"],
-            "timeout": 60,
-            "retry_count": 3
+            "endpoints": {
+                "completions": "https://api.openai.com/v1/chat/completions",
+                "embeddings": "https://api.openai.com/v1/embeddings"
+            },
+            "keys": ["your-openai-api-key-1", "your-openai-api-key-2"]
         },
         {
             "name": "anthropic",
@@ -33,7 +34,10 @@
                     "model": "claude-3-sonnet-20240229"
                 }
             ],
-            "url": "https://api.anthropic.com/v1/messages",
+            "endpoints": {
+                "completions": "https://api.openai.com/v1/chat/completions",
+                "embeddings": "https://api.openai.com/v1/embeddings"
+            },
             "keys": ["your-anthropic-api-key"]
         }
     ]

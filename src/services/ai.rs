@@ -6,6 +6,12 @@ use crate::config::Provider;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
+#[derive(Debug, Clone, Copy)]
+pub enum EndpointType {
+    Completions,
+    Embeddings,
+}
+
 pub struct AIService {
     state: AppState,
 }
@@ -63,6 +69,7 @@ impl AIService {
         mut payload: Value,
         model: String,
         _headers: HeaderMap,
+        endpoint_type: EndpointType,
     ) -> AppResult<Response> {
         // 查找提供者
         let provider = self
@@ -82,11 +89,17 @@ impl AIService {
         // 选择API密钥
         let api_key = self.select_api_key(&provider).await?;
 
+        // 根据端点类型选择URL
+        let url = match endpoint_type {
+            EndpointType::Completions => &provider.endpoints.completions,
+            EndpointType::Embeddings => &provider.endpoints.embeddings,
+        };
+
         // 直接转发请求并返回流式响应
         let response = self
             .state
             .http_client
-            .post(&provider.url)
+            .post(url)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
             .json(&payload)

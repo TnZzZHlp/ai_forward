@@ -72,6 +72,7 @@ fn create_router(app_state: AppState) -> Router {
         "/v1",
         Router::new()
             .route("/chat/completions", post(chat::chat_completions))
+            .route("/embeddings", post(chat::embeddings))
             .route("/models", get(chat::list_models))
             .layer(axum::middleware::from_fn_with_state(
                 app_state.clone(),
@@ -90,7 +91,7 @@ fn create_router(app_state: AppState) -> Router {
             ServiceBuilder::new().layer(
                 TraceLayer::new_for_http()
                     .make_span_with(
-                        tower_http::trace::DefaultMakeSpan::new().level(tracing::Level::INFO),
+                        tower_http::trace::DefaultMakeSpan::new().level(tracing::Level::ERROR),
                     )
                     .on_request(
                         tower_http::trace::DefaultOnRequest::new().level(tracing::Level::DEBUG),

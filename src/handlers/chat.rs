@@ -7,7 +7,7 @@ use axum::{
 use serde_json::{json, Value};
 
 use crate::error::{AppError, AppResult};
-use crate::services::ai::AIService;
+use crate::services::ai::{AIService, EndpointType};
 use crate::state::AppState;
 
 pub async fn chat_completions(
@@ -29,7 +29,30 @@ pub async fn chat_completions(
 
     // 直接转发请求，只替换model字段
     ai_service
-        .forward_request_with_model_replacement(payload, model, headers)
+        .forward_request_with_model_replacement(payload, model, headers, EndpointType::Completions)
+        .await
+}
+
+pub async fn embeddings(
+    State(app_state): State<AppState>,
+    headers: HeaderMap,
+    AxumJson(payload): AxumJson<Value>,
+) -> AppResult<Response> {
+    let ai_service = AIService::new(app_state);
+
+    // 从JSON中提取model字段
+    let model = match payload.get("model").and_then(|v| v.as_str()) {
+        Some(model) => model.to_string(),
+        None => {
+            return Err(AppError::Validation(
+                "Missing or invalid model field".to_string(),
+            ));
+        }
+    };
+
+    // 直接转发请求，只替换model字段
+    ai_service
+        .forward_request_with_model_replacement(payload, model, headers, EndpointType::Embeddings)
         .await
 }
 

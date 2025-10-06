@@ -29,8 +29,14 @@ pub struct LogConfig {
 pub struct Provider {
     pub name: String,
     pub models: Vec<Model>,
-    pub url: String,
+    pub endpoints: Endpoints,
     pub keys: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Endpoints {
+    pub completions: String,
+    pub embeddings: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
