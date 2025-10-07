@@ -16,13 +16,8 @@ pub async fn auth_handler(
     req: Request,
     next: Next,
 ) -> Response {
-    // 优先从 X-Real-IP 请求头获取真实IP，否则使用连接地址
-    let client_ip = req
-        .headers()
-        .get("x-real-ip")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| addr.ip().to_string());
+    // 获取客户端真实IP，优先级：X-Real-IP > X-Forwarded-For > 连接地址
+    let client_ip = extract_client_ip(&req, &addr);
 
     // 检查IP是否已被封禁
     if app_state.ip_ban_manager.is_banned(&client_ip) {
@@ -67,4 +62,28 @@ pub async fn auth_handler(
     }));
 
     (StatusCode::UNAUTHORIZED, error_response).into_response()
+}
+
+/// 提取客户端真实IP地址
+/// 优先级：X-Real-IP > X-Forwarded-For > 连接地址
+fn extract_client_ip(req: &Request, addr: &SocketAddr) -> String {
+    // 首先尝试从 X-Real-IP 获取
+    if let Some(real_ip) = req.headers().get("x-real-ip").and_then(|h| h.to_str().ok()) {
+        return real_ip.to_string();
+    }
+
+    // 然后尝试从 X-Forwarded-For 获取
+    if let Some(forwarded_for) = req
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|h| h.to_str().ok())
+    {
+        // X-Forwarded-For 可能包含多个IP，取第一个
+        if let Some(first_ip) = forwarded_for.split(',').next() {
+            return first_ip.trim().to_string();
+        }
+    }
+
+    // 最后使用连接地址
+    addr.ip().to_string()
 }
