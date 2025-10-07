@@ -91,8 +91,22 @@ impl AIService {
 
         // 根据端点类型选择URL
         let url = match endpoint_type {
-            EndpointType::Completions => &provider.endpoints.completions,
-            EndpointType::Embeddings => &provider.endpoints.embeddings,
+            EndpointType::Completions => {
+                provider.endpoints.completions.as_ref().ok_or_else(|| {
+                    AppError::Validation(format!(
+                        "Provider '{}' does not support completions endpoint",
+                        provider.name
+                    ))
+                })?
+            }
+            EndpointType::Embeddings => {
+                provider.endpoints.embeddings.as_ref().ok_or_else(|| {
+                    AppError::Validation(format!(
+                        "Provider '{}' does not support embeddings endpoint",
+                        provider.name
+                    ))
+                })?
+            }
         };
 
         // 直接转发请求并返回流式响应

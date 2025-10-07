@@ -28,6 +28,7 @@ pub struct LogConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Provider {
     pub name: String,
+    #[serde(default)]
     pub models: Vec<Model>,
     pub endpoints: Endpoints,
     pub keys: Vec<String>,
@@ -35,8 +36,8 @@ pub struct Provider {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Endpoints {
-    pub completions: String,
-    pub embeddings: String,
+    pub completions: Option<String>,
+    pub embeddings: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -81,9 +82,11 @@ impl Config {
                     provider.name
                 )));
             }
-            if provider.models.is_empty() {
+
+            // 验证至少有一个端点被配置
+            if provider.endpoints.completions.is_none() && provider.endpoints.embeddings.is_none() {
                 return Err(ConfigError(format!(
-                    "Provider '{}' must have at least one model",
+                    "Provider '{}' must have at least one endpoint (completions or embeddings)",
                     provider.name
                 )));
             }
