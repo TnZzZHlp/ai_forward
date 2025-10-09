@@ -5,7 +5,7 @@ use axum::{
     response::{IntoResponse, Json, Response},
 };
 use serde_json::json;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use tracing::warn;
 
 use crate::state::AppState;
@@ -64,10 +64,40 @@ pub async fn auth_handler(
     (StatusCode::UNAUTHORIZED, error_response).into_response()
 }
 
+/// 判断是否为内网IP地址
+fn is_private_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ipv4) => {
+            let octets = ipv4.octets();
+            // 10.0.0.0/8
+            octets[0] == 10
+                // 172.16.0.0/12
+                || (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31)
+                // 192.168.0.0/16
+                || (octets[0] == 192 && octets[1] == 168)
+                // 127.0.0.0/8 (loopback)
+                || octets[0] == 127
+        }
+        IpAddr::V6(ipv6) => {
+            // IPv6 loopback (::1)
+            ipv6.is_loopback()
+                // IPv6 unique local addresses (fc00::/7)
+                || (ipv6.segments()[0] & 0xfe00) == 0xfc00
+        }
+    }
+}
+
 /// 提取客户端真实IP地址
-/// 优先级：X-Real-IP > X-Forwarded-For > 连接地址
+/// 优先级：非内网的连接地址 > X-Real-IP > X-Forwarded-For > 连接地址
 fn extract_client_ip(req: &Request, addr: &SocketAddr) -> String {
-    // 首先尝试从 X-Real-IP 获取
+    let conn_ip = addr.ip();
+
+    // 如果连接地址不是内网IP，直接使用它
+    if !is_private_ip(&conn_ip) {
+        return conn_ip.to_string();
+    }
+
+    // 连接地址是内网IP，尝试从 X-Real-IP 获取
     if let Some(real_ip) = req.headers().get("x-real-ip").and_then(|h| h.to_str().ok()) {
         return real_ip.to_string();
     }
@@ -85,5 +115,5 @@ fn extract_client_ip(req: &Request, addr: &SocketAddr) -> String {
     }
 
     // 最后使用连接地址
-    addr.ip().to_string()
+    conn_ip.to_string()
 }
