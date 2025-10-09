@@ -19,7 +19,7 @@ mod services;
 mod state;
 
 use config::Config;
-use handlers::{chat, stats};
+use handlers::{chat, stats, version};
 use middleware::auth_handler;
 use state::AppState;
 
@@ -82,7 +82,8 @@ fn create_router(app_state: AppState) -> Router {
 
     let manage_routes = Router::new()
         .route("/stats", get(stats::get_stats))
-        .route("/reset", get(stats::reset_stats));
+        .route("/reset", get(stats::reset_stats))
+        .route("/version", get(version::get_version));
 
     Router::new()
         .merge(ai_routes)
@@ -134,4 +135,3 @@ async fn shutdown_signal() {
         },
     }
 }
-
